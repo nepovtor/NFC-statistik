@@ -973,6 +973,22 @@ class AppFactoryTests(unittest.TestCase):
         self.assertIn("/client/tags/{tag_id}/update", route_paths)
         self.assertIn("/go/{tag_code}", route_paths)
 
+    def test_home_page_renders_product_landing(self):
+        with TemporaryDirectory() as tmp_dir:
+            temp_db = Path(tmp_dir) / "landing.db"
+            with test_runtime_settings(db_path=temp_db):
+                init_db()
+                app = create_app()
+                with TestClient(app) as client:
+                    response = client.get("/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("text/html", response.headers.get("content-type", ""))
+        self.assertIn("NFC Flow Control", response.text)
+        self.assertIn("/admin/login", response.text)
+        self.assertIn("/client/login", response.text)
+        self.assertIn("/go/table1", response.text)
+
     def test_readyz_reports_pending_migrations_when_database_is_not_bootstrapped(self):
         with TemporaryDirectory() as tmp_dir:
             temp_db = Path(tmp_dir) / "pending.db"

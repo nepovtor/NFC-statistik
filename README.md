@@ -146,7 +146,7 @@ docker compose up -d --build
 
 После первого запуска проверь:
 
-- `http://127.0.0.1:8001/` — корневой маршрут
+- `http://127.0.0.1:8001/` — публичная витрина продукта
 - `http://127.0.0.1:8001/healthz` — liveness
 - `http://127.0.0.1:8001/readyz` — readiness
 - `http://127.0.0.1:8001/admin/login` — вход в админку
@@ -234,7 +234,7 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 
 | Адрес | Назначение |
 | --- | --- |
-| `/` | Проверка, что сервис работает |
+| `/` | Публичная landing page продукта |
 | `/healthz` | Технический liveness endpoint |
 | `/readyz` | Технический readiness endpoint |
 | `/admin` | Дашборд администратора |

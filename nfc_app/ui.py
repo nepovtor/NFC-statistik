@@ -24,7 +24,7 @@ ADMIN_NAV_SECTIONS = [
         "title": "Инструменты",
         "links": [
             {"href": "/admin/export.csv", "label": "Экспорт CSV", "icon": "export"},
-            {"href": "/", "label": "Проверка API", "icon": "pulse"},
+            {"href": "/", "label": "Публичный сайт", "icon": "spark"},
         ],
     },
 ]
@@ -42,6 +42,7 @@ CLIENT_NAV_SECTIONS = [
         "title": "Инструменты",
         "links": [
             {"href": "/client/export.csv", "label": "Отчёт CSV", "icon": "export"},
+            {"href": "/", "label": "Витрина", "icon": "spark"},
             {"href": "/client/login", "label": "Вход", "icon": "login"},
         ],
     },
