@@ -4,10 +4,25 @@
 
 {% block content %}
     {% call page_header("Личный кабинет", "Клиент: " ~ client.name ~ ". Здесь видны только ваши NFC-метки и ваши переходы.") %}
-        <a class="btn btn-hero" href="/client/tags">{{ icon('tags') }}<span>Открыть мои NFC</span></a>
+        <a class="btn btn-hero" href="/client/tags">{{ icon('tags') }}<span>Открыть мои ссылки</span></a>
         <a class="btn btn-secondary" href="/client/visits">{{ icon('visits') }}<span>Переходы</span></a>
         <a class="btn btn-secondary" href="/client/export.csv">{{ icon('export') }}<span>Скачать CSV</span></a>
         {{ logout_form("/client/logout", csrf_token) }}
+    {% endcall %}
+
+    {% call panel('', 'panel client-hero') %}
+        <div class="client-hero-content">
+            <div class="eyebrow">Mini Product</div>
+            <h2 class="client-hero-title">Ваши NFC-ссылки готовы к работе без лишней технической панели</h2>
+            <div class="client-hero-text">
+                Здесь проще всего делать три вещи: быстро копировать рабочую ссылку на метку, проверять её текущий статус и смотреть, как часто её сканируют.
+            </div>
+            <div class="client-benefits">
+                <div class="client-benefit">{{ icon('tags') }}<span>Мои ссылки под рукой</span></div>
+                <div class="client-benefit">{{ icon('visits') }}<span>Переходы и активность</span></div>
+                <div class="client-benefit">{{ icon('export') }}<span>Отчёт в CSV в один клик</span></div>
+            </div>
+        </div>
     {% endcall %}
 
     <div class="cards">
@@ -24,7 +39,7 @@
 
         {% call panel("Быстрые действия") %}
             {% call hint_box() %}
-                В кабинете можно смотреть статистику, копировать рабочие NFC-ссылки, редактировать свою ссылку назначения и выгружать данные в CSV.
+                Кабинет собран вокруг повседневных задач: скопировать рабочую NFC-ссылку, убедиться, что метка активна, и быстро проверить переходы.
             {% endcall %}
             <div class="spacer-sm"></div>
             <div class="action-grid">
@@ -33,8 +48,8 @@
                         <span class="action-card-icon">{{ icon('tags') }}</span>
                         <span class="action-card-arrow">{{ icon('open') }}</span>
                     </div>
-                    <div class="action-card-title">Мои NFC</div>
-                    <div class="action-card-text">Редактируй названия, ссылки и статусы своих меток в одном месте.</div>
+                    <div class="action-card-title">Мои ссылки</div>
+                    <div class="action-card-text">Открой карточки меток, скопируй рабочую ссылку и проверь статус каждой из них.</div>
                 </a>
                 <a class="action-card" href="/client/visits">
                     <div class="action-card-top">
@@ -60,7 +75,7 @@
         {% call data_table(["Метка", "Куда ведёт", "Переходы", "Статус"]) %}
             {% if tags %}
                 {% for row in tags %}
-                    <tr>
+                    <tr class="{{ 'row-state-ok' if row.is_active else 'row-state-off' }}">
                         <td data-label="Метка"><div><strong>{{ row.name }}</strong></div><div class="small muted mono">{{ row.code }}</div></td>
                         <td data-label="Куда ведёт" class="mono">{{ row.target_url }}</td>
                         <td data-label="Переходы">{{ row.clicks }}</td>
@@ -68,7 +83,7 @@
                     </tr>
                 {% endfor %}
             {% else %}
-                {{ empty_row(4, "У вас пока нет меток.") }}
+                {{ empty_row(4, "У вас пока нет ссылок", "Когда администратор назначит метку, она появится здесь вместе со статусом и рабочей NFC-ссылкой.", "/client/tags", "Открыть раздел ссылок", "tags") }}
             {% endif %}
         {% endcall %}
     {% endcall %}
@@ -86,7 +101,7 @@
                     </tr>
                 {% endfor %}
             {% else %}
-                {{ empty_row(5, "Переходов ещё нет.") }}
+                {{ empty_row(5, "Переходов ещё нет", "Как только кто-то откроет вашу NFC-ссылку, здесь сразу появится запись о визите.", "/client/tags", "Проверить мои ссылки", "visits") }}
             {% endif %}
         {% endcall %}
     {% endcall %}

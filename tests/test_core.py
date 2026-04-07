@@ -450,6 +450,46 @@ class SecurityFlowTests(unittest.TestCase):
                     self.assertEqual(blocked.status_code, 303)
                     self.assertIn("%D0%A1%D0%BB%D0%B8%D1%88%D0%BA%D0%BE%D0%BC+%D0%BC%D0%BD%D0%BE%D0%B3%D0%BE", blocked.headers["location"])
 
+    def test_admin_auth_failures_are_written_to_audit_log(self):
+        with TemporaryDirectory() as tmp_dir:
+            temp_db = Path(tmp_dir) / "test.db"
+            with test_runtime_settings(db_path=temp_db, login_rate_limit_attempts=1, login_rate_limit_window_minutes=15):
+                init_db()
+                app = create_app()
+                with TestClient(app) as client:
+                    failed_login = login_admin(client, password="WrongPassword")
+                    self.assertEqual(failed_login.status_code, 303)
+
+                    blocked_login = login_admin(client, password="AdminSecret123")
+                    self.assertEqual(blocked_login.status_code, 303)
+                    self.assertIn("%D0%A1%D0%BB%D0%B8%D1%88%D0%BA%D0%BE%D0%BC+%D0%BC%D0%BD%D0%BE%D0%B3%D0%BE", blocked_login.headers["location"])
+
+                    conn = sqlite3.connect(temp_db)
+                    conn.execute("DELETE FROM login_attempts")
+                    conn.commit()
+                    conn.close()
+
+                    ok_login = login_admin(client)
+                    self.assertEqual(ok_login.status_code, 303)
+
+                    audit_page = client.get("/admin/audit")
+                    self.assertEqual(audit_page.status_code, 200)
+
+                conn = sqlite3.connect(temp_db)
+                actions = [row[0] for row in conn.execute(
+                    """
+                    SELECT action
+                    FROM admin_audit_logs
+                    WHERE action IN ('admin.login_failed', 'admin.login_rate_limited')
+                    ORDER BY id ASC
+                    """
+                ).fetchall()]
+                conn.close()
+
+        self.assertEqual(actions, ["admin.login_failed", "admin.login_rate_limited"])
+        self.assertIn("Ошибка входа", audit_page.text)
+        self.assertIn("Блокировка rate limit", audit_page.text)
+
     def test_client_data_is_isolated_between_different_accounts(self):
         with TemporaryDirectory() as tmp_dir:
             temp_db = Path(tmp_dir) / "test.db"

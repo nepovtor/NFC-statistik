@@ -3,7 +3,6 @@ from __future__ import annotations
 import sqlite3
 import re
 
-from ..auth import hash_password, normalize_client_id, valid_client_login
 from ..repositories.visit_repository import list_admin_visit_tag_codes, list_admin_visits, list_admin_visits_for_export
 from ..repositories.admin_repository import (
     assign_tag_owner,
@@ -20,6 +19,7 @@ from ..repositories.admin_repository import (
 )
 from ..services.admin_audit_service import AdminAuditActor, record_admin_audit_event
 from ..services.errors import ConflictError, NotFoundError, ValidationError
+from ..security.passwords import hash_password, normalize_client_id, valid_client_login
 from ..validators import is_public_http_url
 from ..visit_policy import sanitize_visit_rows
 

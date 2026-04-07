@@ -1,17 +1,14 @@
-from __future__ import annotations
-
-import getpass
-import sys
-
-from .security import (
+from .constants import (
     SESSION_PRINCIPAL_ADMIN,
     SESSION_PRINCIPAL_CLIENT,
     SESSION_PRINCIPAL_GUEST,
     SESSION_SCOPE_ADMIN,
     SESSION_SCOPE_CLIENT,
-    admin_tailscale_block_response,
+)
+from .network import admin_tailscale_block_response, get_request_ip, is_admin_request_allowed, is_ip_allowed_for_admin
+from .passwords import client_exists, hash_password, normalize_client_id, valid_client_login, verify_password
+from .sessions import (
     clear_scope_cookie,
-    client_exists,
     create_admin_session,
     create_client_session,
     datetime_offset_str,
@@ -19,23 +16,16 @@ from .security import (
     get_admin_session,
     get_current_client,
     get_next_path,
-    get_request_ip,
     get_scope_session,
     get_session_csrf_token,
-    hash_password,
     has_admin_access,
-    is_admin_request_allowed,
-    is_ip_allowed_for_admin,
-    normalize_client_id,
     require_admin,
     require_client,
     revoke_scope_session,
     safe_admin_path,
     safe_client_path,
     set_scope_cookie,
-    valid_client_login,
     validate_csrf_token,
-    verify_password,
 )
 
 __all__ = [
@@ -45,8 +35,15 @@ __all__ = [
     "SESSION_SCOPE_ADMIN",
     "SESSION_SCOPE_CLIENT",
     "admin_tailscale_block_response",
-    "clear_scope_cookie",
+    "get_request_ip",
+    "is_admin_request_allowed",
+    "is_ip_allowed_for_admin",
     "client_exists",
+    "hash_password",
+    "normalize_client_id",
+    "valid_client_login",
+    "verify_password",
+    "clear_scope_cookie",
     "create_admin_session",
     "create_client_session",
     "datetime_offset_str",
@@ -54,43 +51,14 @@ __all__ = [
     "get_admin_session",
     "get_current_client",
     "get_next_path",
-    "get_request_ip",
     "get_scope_session",
     "get_session_csrf_token",
-    "hash_password",
     "has_admin_access",
-    "is_admin_request_allowed",
-    "is_ip_allowed_for_admin",
-    "normalize_client_id",
     "require_admin",
     "require_client",
     "revoke_scope_session",
     "safe_admin_path",
     "safe_client_path",
     "set_scope_cookie",
-    "valid_client_login",
     "validate_csrf_token",
-    "verify_password",
 ]
-
-
-def main(argv: list[str] | None = None) -> int:
-    args = argv or sys.argv[1:]
-    if not args or args[0] != "hash-password":
-        print("Usage: python3 -m nfc_app.auth hash-password [password]", file=sys.stderr)
-        return 1
-
-    if len(args) > 1:
-        password = args[1]
-    else:
-        password = getpass.getpass("Password: ")
-    if not password:
-        print("Password cannot be empty.", file=sys.stderr)
-        return 1
-
-    print(hash_password(password))
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())

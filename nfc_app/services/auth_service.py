@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-from ..auth import SESSION_SCOPE_ADMIN, SESSION_SCOPE_CLIENT, verify_password
 from ..repositories.security_repository import (
     clear_failed_login_attempts,
     count_recent_failed_attempts_by_ip,
@@ -14,6 +13,8 @@ from ..repositories.security_repository import (
     prune_login_attempts,
     record_login_attempt,
 )
+from ..security.constants import SESSION_SCOPE_ADMIN, SESSION_SCOPE_CLIENT
+from ..security.passwords import verify_password
 from ..settings import settings
 
 
@@ -23,6 +24,7 @@ class LoginResult:
     principal_id: int | None = None
     message: str | None = None
     retry_after_seconds: int = 0
+    reason: str = "invalid_credentials"
 
 
 def _now() -> datetime:
@@ -76,6 +78,7 @@ def _authenticate(scope: str, login_key: str, password: str, ip_address: str, *,
             ok=False,
             message=_rate_limit_message(retry_after_seconds),
             retry_after_seconds=retry_after_seconds,
+            reason="rate_limited",
         )
 
     principal = get_admin_auth_record(login_key) if admin else get_client_auth_record(login_key)
@@ -84,10 +87,10 @@ def _authenticate(scope: str, login_key: str, password: str, ip_address: str, *,
     record_login_attempt(scope, login_key, ip_address, was_success=is_valid)
 
     if not is_valid:
-        return LoginResult(ok=False, message="Неверный логин или пароль")
+        return LoginResult(ok=False, message="Неверный логин или пароль", reason="invalid_credentials")
 
     clear_failed_login_attempts(scope, login_key, ip_address)
-    return LoginResult(ok=True, principal_id=int(principal["id"]))
+    return LoginResult(ok=True, principal_id=int(principal["id"]), reason="ok")
 
 
 def authenticate_admin(login_key: str, password: str, ip_address: str) -> LoginResult:

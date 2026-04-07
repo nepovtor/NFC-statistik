@@ -5,22 +5,22 @@ from typing import Optional
 from fastapi import APIRouter, Form, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
-from ..auth import (
-    SESSION_SCOPE_CLIENT,
+from ..dashboard_service import get_client_dashboard_data
+from ..presentation import build_chart_rows, csv_response, redirect_with_query
+from ..repositories.common import rows_to_dicts
+from ..security.constants import SESSION_SCOPE_CLIENT
+from ..security.network import get_request_ip
+from ..security.sessions import (
     clear_scope_cookie,
     create_client_session,
     ensure_scope_session,
     get_current_client,
-    get_request_ip,
     revoke_scope_session,
     require_client,
     safe_client_path,
     set_scope_cookie,
     validate_csrf_token,
 )
-from ..dashboard_service import get_client_dashboard_data
-from ..presentation import build_chart_rows, csv_response, redirect_with_query
-from ..repositories.common import rows_to_dicts
 from ..services.auth_service import authenticate_client
 from ..services.client_service import (
     get_client_export_rows,

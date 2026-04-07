@@ -3,10 +3,29 @@
 {% from "macros.html" import csrf_input, icon, logout_form, status_badge %}
 
 {% block content %}
-    {% call page_header("Мои NFC", "Здесь видны ваши коды, рабочие NFC-ссылки и текущий статус каждой метки.") %}
+    {% call page_header("Мои ссылки", "Здесь видны ваши коды, рабочие NFC-ссылки и текущий статус каждой метки.") %}
         <a class="btn btn-secondary" href="/client/visits">{{ icon('visits') }}<span>Переходы</span></a>
         {{ logout_form("/client/logout", csrf_token) }}
     {% endcall %}
+
+    <div class="client-soft-grid">
+        <div class="client-soft-card">
+            <div class="client-soft-label">Всего ссылок</div>
+            <div class="client-soft-value">{{ tags|length }}</div>
+            <div class="client-soft-note">Карточек с рабочими NFC-кодами</div>
+        </div>
+        <div class="client-soft-card">
+            <div class="client-soft-label">Активные сейчас</div>
+            <div class="client-soft-value">{{ tags|selectattr('is_active')|list|length }}</div>
+            <div class="client-soft-note">Можно сразу выдавать в работу</div>
+        </div>
+        <div class="client-soft-card">
+            <div class="client-soft-label">Главное действие</div>
+            <div class="client-soft-value">Скопировать ссылку</div>
+            <div class="client-soft-note">Это самый частый сценарий в кабинете</div>
+        </div>
+    </div>
+    <div class="spacer-sm"></div>
 
     {% call panel("Что записывать в NFC") %}
         {% call hint_box() %}
@@ -31,10 +50,10 @@
 
                     <div class="meta-list">
                         <div class="meta-item">
-                            <div class="meta-label">NFC-ссылка</div>
+                            <div class="meta-label">Рабочая NFC-ссылка</div>
                             <div class="meta-stack">
                                 <div class="meta-value mono">{{ row.public_url }}</div>
-                                {{ copy_button(row.public_url) }}
+                                {{ copy_button(row.public_url, 'Скопировать NFC-ссылку', 'Ссылка скопирована', 'btn btn-hero') }}
                             </div>
                         </div>
                         <div class="meta-item">

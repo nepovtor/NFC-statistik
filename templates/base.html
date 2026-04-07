@@ -4,7 +4,7 @@
     {% include "partials/head.html" %}
     {% block head_extra %}{% endblock %}
 </head>
-<body>
+<body class="{{ ui_mode or 'app-mode' }}">
     <div class="site-shell">
         {% include "partials/sidebar.html" %}
 

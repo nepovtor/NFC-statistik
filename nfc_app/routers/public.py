@@ -6,9 +6,9 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 from fastapi.responses import RedirectResponse
 
-from ..auth import get_request_ip
 from ..database import MIGRATIONS, close_connection, get_connection, get_pending_migrations, now_str
 from ..repositories.visit_repository import record_visit
+from ..security.network import get_request_ip
 
 router = APIRouter()
 

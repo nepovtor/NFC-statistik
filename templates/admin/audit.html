@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% from "components/ui.html" import data_table, empty_row, page_header, panel %}
-{% from "macros.html" import icon, logout_form %}
+{% from "macros.html" import icon, logout_form, metric_card %}
 
 {% block content %}
     {% call page_header("Аудит действий", "Последние административные события и изменения в системе.") %}
@@ -12,6 +12,30 @@
             {{ icon('export') }}<span>Экспорт CSV</span>
         </a>
         {{ logout_form("/admin/logout", csrf_token) }}
+    {% endcall %}
+
+    <div class="cards cards-audit">
+        {{ metric_card("Всего событий", summary.total_events, "Все записи audit log") }}
+        {{ metric_card("Успешные входы", summary.successful_logins, "Последний: " ~ summary.last_successful_login_at) }}
+        {{ metric_card("Auth issues", summary.auth_issues, "Последний: " ~ summary.last_auth_issue_at) }}
+        {{ metric_card("Rate limit", summary.rate_limit_blocks, "Отдельные блокировки входа") }}
+    </div>
+
+    {% call panel("Контур безопасности") %}
+        <div class="audit-overview">
+            <div class="audit-overview-item">
+                <div class="audit-overview-label">Последнее изменение данных</div>
+                <div class="audit-overview-value">{{ summary.last_mutation_at }}</div>
+            </div>
+            <div class="audit-overview-item">
+                <div class="audit-overview-label">Последний успешный вход</div>
+                <div class="audit-overview-value">{{ summary.last_successful_login_at }}</div>
+            </div>
+            <div class="audit-overview-item">
+                <div class="audit-overview-label">Последняя auth-проблема</div>
+                <div class="audit-overview-value">{{ summary.last_auth_issue_at }}</div>
+            </div>
+        </div>
     {% endcall %}
 
     {% call panel("Фильтр") %}
@@ -30,11 +54,20 @@
         {% call data_table(["ID", "Дата и время", "Админ", "Действие", "Цель", "IP", "Детали"], true, "Быстрый поиск по действию, админу, цели или IP") %}
             {% if events %}
                 {% for row in events %}
-                    <tr>
+                    <tr class="{% if row.action_tone == 'ok' %}row-state-ok{% elif row.action_tone == 'accent' %}row-state-accent{% elif row.action_tone in ('warn', 'danger') %}row-state-off{% endif %}">
                         <td data-label="ID">{{ row.id }}</td>
                         <td data-label="Дата и время">{{ row.created_at }}</td>
-                        <td data-label="Админ">{{ row.admin_login }}</td>
-                        <td data-label="Действие" class="mono">{{ row.action }}</td>
+                        <td data-label="Админ">
+                            <div><strong>{{ row.admin_login or "unknown" }}</strong></div>
+                            <div class="small muted">{{ row.ip_address or "ip unknown" }}</div>
+                        </td>
+                        <td data-label="Действие">
+                            <span class="audit-badge audit-badge-{{ row.action_tone }}">
+                                {{ icon(row.action_icon) }}
+                                <span>{{ row.action_label }}</span>
+                            </span>
+                            <div class="small muted mono">{{ row.action }}</div>
+                        </td>
                         <td data-label="Цель">{{ row.target_display }}</td>
                         <td data-label="IP">{{ row.ip_address or "" }}</td>
                         <td data-label="Детали" class="small mono">{{ row.details_display }}</td>

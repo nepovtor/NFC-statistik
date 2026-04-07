@@ -5,13 +5,16 @@ from typing import Optional
 from fastapi import APIRouter, Form, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
-from ..auth import (
-    SESSION_SCOPE_ADMIN,
+from ..dashboard_service import get_admin_dashboard_data
+from ..presentation import build_chart_rows, csv_response, redirect_with_query
+from ..repositories.common import rows_to_dicts
+from ..security.constants import SESSION_SCOPE_ADMIN
+from ..security.network import get_request_ip
+from ..security.sessions import (
     clear_scope_cookie,
     create_admin_session,
     ensure_scope_session,
     get_admin_session,
-    get_request_ip,
     has_admin_access,
     revoke_scope_session,
     require_admin,
@@ -19,9 +22,6 @@ from ..auth import (
     set_scope_cookie,
     validate_csrf_token,
 )
-from ..dashboard_service import get_admin_dashboard_data
-from ..presentation import build_chart_rows, csv_response, redirect_with_query
-from ..repositories.common import rows_to_dicts
 from ..services.admin_audit_service import (
     AdminAuditActor,
     get_admin_audit_export_rows,
@@ -133,6 +133,24 @@ def admin_login_submit(
         response = RedirectResponse(url=next_path, status_code=303)
         set_scope_cookie(response, SESSION_SCOPE_ADMIN, raw_token)
         return response
+
+    if login:
+        failure_action = "admin.login_rate_limited" if login_result.reason == "rate_limited" else "admin.login_failed"
+        failure_details = {"login_key": login, "next": next_path}
+        if login_result.retry_after_seconds > 0:
+            failure_details["retry_after_seconds"] = login_result.retry_after_seconds
+        record_admin_audit_event(
+            actor=AdminAuditActor(
+                admin_id=None,
+                admin_login=login,
+                ip_address=get_request_ip(request),
+                user_agent=request.headers.get("user-agent", "").strip(),
+            ),
+            action=failure_action,
+            target_type="admin_auth",
+            target_label=login,
+            details=failure_details,
+        )
 
     return redirect_with_query(
         "/admin/login",
@@ -386,6 +404,7 @@ def admin_audit(
             request,
             page_title="Аудит действий",
             active_nav="/admin/audit",
+            summary=data["summary"],
             events=data["events"],
             limit=data["limit"],
             page=data["page"],

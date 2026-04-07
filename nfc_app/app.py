@@ -5,9 +5,9 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
-from .auth import admin_tailscale_block_response, is_admin_request_allowed
 from .database import assert_database_ready, connection_scope
 from .routers import admin_router, client_router, public_router
+from .security.network import admin_tailscale_block_response, is_admin_request_allowed
 from .settings import settings, validate_runtime_settings
 
 
