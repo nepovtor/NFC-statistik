@@ -1,4 +1,4 @@
-{% from "macros.html" import icon, status_badge %}
+{% from "macros.html" import icon %}
 
 <!doctype html>
 <html lang="ru">
@@ -19,7 +19,7 @@
             <nav class="landing-nav-links">
                 <a href="#how-it-works">Как работает</a>
                 <a href="#product">Что внутри</a>
-                <a href="#engineering">Engineering</a>
+                <a href="#engineering">Почему зрелый</a>
             </nav>
 
             <div class="landing-nav-actions">
@@ -33,24 +33,23 @@
             <section class="landing-hero">
                 <section class="panel landing-hero-copy">
                     <div class="landing-kicker">{{ icon('spark') }}<span>Self-hosted NFC SaaS</span></div>
-                    <h1 class="landing-title">NFC-метки как управляемый продукт, а не просто редирект.</h1>
+                    <h1 class="landing-title">NFC-метки как управляемый сервис.</h1>
                     <p class="landing-subtitle">
-                        Один стабильный адрес на метке, отдельные кабинеты для клиентов, live-аналитика переходов, audit trail,
-                        privacy-by-storage и аккуратный self-hosted deployment для реального использования, а не только для демо.
+                        Один стабильный URL на метке, клиентские кабинеты и аккуратная аналитика переходов.
+                        Без перевыпуска NFC и без ощущения “сырой админки”.
                     </p>
 
                     <div class="landing-hero-actions">
-                        <a class="btn btn-hero" href="#product">{{ icon('open') }}<span>Посмотреть продукт</span></a>
-                        <a class="btn btn-secondary" href="/client/login">{{ icon('tags') }}<span>Посмотреть кабинет клиента</span></a>
-                        <a class="btn btn-secondary" href="/admin/login">{{ icon('dashboard') }}<span>Админ-контур</span></a>
+                        <a class="btn btn-hero" href="/admin/login">{{ icon('dashboard') }}<span>Открыть админку</span></a>
+                        <a class="btn btn-secondary" href="/client/login">{{ icon('login') }}<span>Кабинет клиента</span></a>
+                        <a class="btn btn-secondary" href="#product">{{ icon('open') }}<span>Что внутри</span></a>
                     </div>
 
                     <div class="landing-url-card">
-                        <div class="landing-url-label">Как выглядит рабочая NFC-ссылка</div>
+                        <div class="landing-url-label">Рабочая NFC-ссылка</div>
                         <div class="landing-url-value mono">{{ example_public_url }}</div>
                         <div class="landing-url-note">
-                            Именно такой адрес записывается в NFC-метку. После сканирования сервис считает визит, сохраняет аналитику
-                            и отправляет человека на нужную целевую страницу.
+                            Этот адрес записывается в метку. После скана сервис считает визит и переводит человека на нужную страницу.
                         </div>
                     </div>
                 </section>
@@ -95,13 +94,13 @@
 
                         <div class="landing-window">
                             <div class="landing-window-head">
-                                <span>Почему это уже выглядит зрелым</span>
-                                <span>Ops-ready</span>
+                                <span>Три причины выбрать этот подход</span>
+                                <span>Ready</span>
                             </div>
                             <div class="landing-card-list">
-                                <div class="landing-card-list-item">{{ icon('audit') }}<span>Server-side sessions, CSRF, rate limit и audit log для админ-действий.</span></div>
-                                <div class="landing-card-list-item">{{ icon('spark') }}<span>Privacy-by-storage и masking на выдаче для аналитических данных.</span></div>
-                                <div class="landing-card-list-item">{{ icon('pulse') }}<span>Health и readiness endpoints, миграции, Docker и non-root runtime.</span></div>
+                                <div class="landing-card-list-item">{{ icon('tags') }}<span>Один стабильный URL на метке, а целевая ссылка меняется в кабинете.</span></div>
+                                <div class="landing-card-list-item">{{ icon('clients') }}<span>У клиента свой лёгкий кабинет без лишней админской сложности.</span></div>
+                                <div class="landing-card-list-item">{{ icon('audit') }}<span>Security, privacy и audit встроены в продукт с самого старта.</span></div>
                             </div>
                         </div>
                     </div>
@@ -110,34 +109,29 @@
 
             <section class="landing-proof">
                 <div class="landing-proof-card">
-                    <div class="landing-proof-label">Сегодня</div>
-                    <div class="landing-proof-value">{{ stats.today_visits }}</div>
-                    <div class="landing-proof-note">переходов с полуночи</div>
+                    <div class="landing-proof-label">Главное</div>
+                    <div class="landing-proof-value">1 URL</div>
+                    <div class="landing-proof-note">метка не требует перепрошивки при смене сценария</div>
                 </div>
                 <div class="landing-proof-card">
-                    <div class="landing-proof-label">За 24 часа</div>
-                    <div class="landing-proof-value">{{ stats.last_24h_visits }}</div>
-                    <div class="landing-proof-note">свежая активность</div>
+                    <div class="landing-proof-label">Для клиентов</div>
+                    <div class="landing-proof-value">2 кабинета</div>
+                    <div class="landing-proof-note">админ видит всё, клиент видит только своё</div>
                 </div>
                 <div class="landing-proof-card">
-                    <div class="landing-proof-label">Активные метки</div>
-                    <div class="landing-proof-value">{{ stats.active_tags }}</div>
-                    <div class="landing-proof-note">готовы к выдаче</div>
-                </div>
-                <div class="landing-proof-card">
-                    <div class="landing-proof-label">Privacy</div>
-                    <div class="landing-proof-value">Storage</div>
-                    <div class="landing-proof-note">данные можно урезать уже при записи</div>
+                    <div class="landing-proof-label">Зрелость</div>
+                    <div class="landing-proof-value">3 слоя</div>
+                    <div class="landing-proof-note">security, privacy и observability уже встроены</div>
                 </div>
             </section>
 
             <section id="how-it-works" class="panel landing-section">
                 <div class="landing-section-head">
                     <div>
-                        <h2 class="landing-section-title">Как работает NFC-сценарий</h2>
+                        <h2 class="landing-section-title">Как это работает</h2>
                         <div class="landing-section-text">
-                            Сервис собран вокруг реального операционного флоу: выпустить стабильную NFC-ссылку, выдать её клиенту,
-                            при необходимости поменять целевой URL без перепрошивки метки и видеть все переходы в одном месте.
+                            В основе простой и полезный flow: выпустить стабильную NFC-ссылку, выдать её клиенту,
+                            а потом менять сценарий и видеть переходы без перепрошивки метки.
                         </div>
                     </div>
                 </div>
@@ -146,22 +140,22 @@
                     <article class="landing-step-card">
                         <div class="landing-step-index">01</div>
                         <h3 class="landing-card-title">Создаёшь метку</h3>
-                        <div class="landing-card-text">В админке задаётся код, понятное имя, целевая ссылка и при необходимости владелец.</div>
+                        <div class="landing-card-text">В админке задаются код, имя и целевая ссылка.</div>
                     </article>
                     <article class="landing-step-card">
                         <div class="landing-step-index">02</div>
-                        <h3 class="landing-card-title">Записываешь URL на NFC</h3>
-                        <div class="landing-card-text">На физическую метку уходит один стабильный адрес вида <span class="mono">/go/{code}</span>.</div>
+                        <h3 class="landing-card-title">Пишешь URL в NFC</h3>
+                        <div class="landing-card-text">На метку записывается один стабильный адрес вида <span class="mono">/go/{code}</span>.</div>
                     </article>
                     <article class="landing-step-card">
                         <div class="landing-step-index">03</div>
                         <h3 class="landing-card-title">Получаешь аналитику</h3>
-                        <div class="landing-card-text">Каждый скан попадает в журнал визитов, а владелец видит только свои данные.</div>
+                        <div class="landing-card-text">Каждый скан попадает в журнал, а владелец видит только свои данные.</div>
                     </article>
                     <article class="landing-step-card">
                         <div class="landing-step-index">04</div>
-                        <h3 class="landing-card-title">Меняешь сценарий без перевыпуска</h3>
-                        <div class="landing-card-text">Целевой URL можно переназначить из кабинета и не трогать уже выданные NFC-метки.</div>
+                        <h3 class="landing-card-title">Меняешь цель без перевыпуска</h3>
+                        <div class="landing-card-text">Целевой URL обновляется из кабинета, сама метка остаётся той же.</div>
                     </article>
                 </div>
             </section>
@@ -171,8 +165,7 @@
                     <div>
                         <h2 class="landing-section-title">Что внутри продукта</h2>
                         <div class="landing-section-text">
-                            В проекте уже есть не только backend-механика, но и три понятных продуктовых слоя: публичная NFC-точка входа,
-                            плотная админка для управления и более лёгкий кабинет клиента как отдельный мини-продукт.
+                            Три понятных слоя: плотная админка, лёгкий клиентский кабинет и публичная NFC-точка входа.
                         </div>
                     </div>
                 </div>
@@ -180,31 +173,28 @@
                 <div class="landing-role-grid">
                     <article class="landing-role-card landing-role-tone-admin">
                         <h3 class="landing-card-title">Админ-контур</h3>
-                        <div class="landing-card-text">Клиенты, метки, переходы, CSV-экспорт, аудит, security controls и приватный доступ через Tailscale.</div>
+                        <div class="landing-card-text">Управление клиентами, метками, переходами и аудитом.</div>
                         <div class="landing-card-list">
-                            <div class="landing-card-list-item">{{ icon('clients') }}<span>Управление клиентскими кабинетами и назначением владельцев.</span></div>
-                            <div class="landing-card-list-item">{{ icon('tags') }}<span>Создание меток и быстрый разворот новых NFC-сценариев.</span></div>
-                            <div class="landing-card-list-item">{{ icon('audit') }}<span>История критичных действий и auth-событий.</span></div>
+                            <div class="landing-card-list-item">{{ icon('clients') }}<span>Клиенты и владельцы меток.</span></div>
+                            <div class="landing-card-list-item">{{ icon('audit') }}<span>Переходы, CSV и история действий.</span></div>
                         </div>
                     </article>
 
                     <article class="landing-role-card landing-role-tone-client">
                         <h3 class="landing-card-title">Кабинет клиента</h3>
-                        <div class="landing-card-text">Сфокусирован на том, что реально нужно владельцу: мои ссылки, мои переходы, копирование NFC-URL и статус метки.</div>
+                        <div class="landing-card-text">Сфокусирован на том, что нужно владельцу каждый день.</div>
                         <div class="landing-card-list">
-                            <div class="landing-card-list-item">{{ icon('tags') }}<span>Рабочие NFC-ссылки и редактирование целевых URL без админ-перегруза.</span></div>
-                            <div class="landing-card-list-item">{{ icon('visits') }}<span>Только собственный журнал визитов и собственный CSV-экспорт.</span></div>
-                            <div class="landing-card-list-item">{{ icon('spark') }}<span>{{ status_badge(true, 'Понятный UX', 'Понятный UX') }} без лишней технической панели.</span></div>
+                            <div class="landing-card-list-item">{{ icon('tags') }}<span>Мои ссылки, статус метки и копирование NFC-URL.</span></div>
+                            <div class="landing-card-list-item">{{ icon('visits') }}<span>Только собственные переходы и собственный CSV.</span></div>
                         </div>
                     </article>
 
                     <article class="landing-role-card landing-role-tone-audit">
                         <h3 class="landing-card-title">Публичная точка входа</h3>
-                        <div class="landing-card-text">Страница-витрина объясняет продукт, а публичный маршрут <span class="mono">/go/{tag_code}</span> остаётся чистой NFC-точкой для реального трафика.</div>
+                        <div class="landing-card-text">Витрина объясняет продукт, а <span class="mono">/go/{tag_code}</span> остаётся чистой NFC-точкой входа.</div>
                         <div class="landing-card-list">
-                            <div class="landing-card-list-item">{{ icon('open') }}<span>Корневая страница показывает продукт как готовый сервис, а не только код.</span></div>
-                            <div class="landing-card-list-item">{{ icon('pulse') }}<span>Отдельные технические endpoints для liveness и readiness остаются независимыми.</span></div>
-                            <div class="landing-card-list-item">{{ icon('export') }}<span>Self-hosted модель подходит и для демо, и для реального развертывания.</span></div>
+                            <div class="landing-card-list-item">{{ icon('open') }}<span>Публичная витрина вместо “голого” индекса.</span></div>
+                            <div class="landing-card-list-item">{{ icon('pulse') }}<span>Отдельные health и readiness endpoints.</span></div>
                         </div>
                     </article>
                 </div>
@@ -213,40 +203,34 @@
             <section id="engineering" class="panel landing-section">
                 <div class="landing-section-head">
                     <div>
-                        <h2 class="landing-section-title">Engineering, который видно снаружи</h2>
+                        <h2 class="landing-section-title">Почему это выглядит зрелым</h2>
                         <div class="landing-section-text">
-                            Этот проект можно показывать не только как “рабочую фичу”, но и как аккуратно доведённую систему: security,
-                            auditability, operational signals и privacy-controls встроены прямо в продуктовую оболочку.
+                            Здесь уже есть не только feature-set, но и взрослая инженерная база для self-hosted сервиса.
                         </div>
                     </div>
                 </div>
 
                 <div class="landing-engineering-grid">
                     <article class="landing-engineering-card">
-                        <h3 class="landing-card-title">Security flow</h3>
-                        <div class="landing-card-text">Отдельный admin account, hash пароля, server-side sessions, secure cookies, CSRF и rate limiting логинов.</div>
+                        <h3 class="landing-card-title">Security</h3>
+                        <div class="landing-card-text">Отдельный admin account, server-side sessions, secure cookies, CSRF и rate limiting.</div>
                     </article>
                     <article class="landing-engineering-card">
-                        <h3 class="landing-card-title">Privacy-by-storage</h3>
-                        <div class="landing-card-text">При желании чувствительные поля режутся уже на записи, а не только скрываются на UI и в CSV.</div>
+                        <h3 class="landing-card-title">Privacy</h3>
+                        <div class="landing-card-text">Чувствительные поля можно урезать уже при записи, а не только маскировать в UI.</div>
                     </article>
                     <article class="landing-engineering-card">
-                        <h3 class="landing-card-title">Audit trail</h3>
-                        <div class="landing-card-text">Успешные и неуспешные входы, rate limit blocks и mutating admin-операции собираются в отдельный лог.</div>
-                    </article>
-                    <article class="landing-engineering-card">
-                        <h3 class="landing-card-title">Self-hosted deploy</h3>
-                        <div class="landing-card-text">Pinned dependencies, Docker, non-root runtime, healthz/readyz и отдельный migration flow.</div>
+                        <h3 class="landing-card-title">Ops</h3>
+                        <div class="landing-card-text">Audit log, Docker, non-root runtime, healthz/readyz и отдельный migration flow.</div>
                     </article>
                 </div>
             </section>
 
             <section class="panel landing-closing">
                 <div>
-                    <h2 class="landing-closing-title">Хороший pet-project перестаёт быть просто pet-project, когда у него появляется витрина.</h2>
+                    <h2 class="landing-closing-title">Небольшой NFC-сервис, который уже выглядит как реальный продукт.</h2>
                     <div class="landing-closing-text">
-                        Теперь этот репозиторий можно показывать и как backend-систему, и как оформленный NFC-продукт: понятный сценарий,
-                        отдельные роли, зрелый security/performance/privacy слой и публичная страница, которая объясняет всё это без чтения кода.
+                        Понятный сценарий, отдельные роли, аккуратный security/privacy слой и self-hosted deployment без лишнего шума.
                     </div>
                 </div>
                 <div class="landing-closing-actions">

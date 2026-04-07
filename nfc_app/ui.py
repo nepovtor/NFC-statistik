@@ -4,7 +4,7 @@ from fastapi import Request
 from fastapi.templating import Jinja2Templates
 
 from .security.constants import SESSION_SCOPE_ADMIN, SESSION_SCOPE_CLIENT
-from .security.sessions import get_session_csrf_token
+from .security.csrf import get_session_csrf_token
 from .settings import settings
 
 templates = Jinja2Templates(directory=str(settings.base_dir / "templates"))
