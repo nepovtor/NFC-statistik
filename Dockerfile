@@ -18,4 +18,4 @@ USER app
 
 EXPOSE 8001
 
-CMD ["python", "-m", "nfc_app"]
+CMD ["python", "-m", "nfc_app", "serve"]

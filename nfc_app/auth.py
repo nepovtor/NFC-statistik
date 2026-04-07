@@ -8,6 +8,7 @@ import re
 import secrets
 import sqlite3
 import sys
+from datetime import datetime, timedelta
 from typing import Optional
 from urllib.parse import quote_plus
 
@@ -154,9 +155,21 @@ def _session_expiry_str() -> str:
 
 
 def datetime_offset_str(*, hours: int = 0) -> str:
-    from datetime import datetime, timedelta
-
     return (datetime.utcnow() + timedelta(hours=hours)).strftime("%Y-%m-%d %H:%M:%S")
+
+
+def _parse_timestamp(value: str) -> Optional[datetime]:
+    try:
+        return datetime.strptime(value, "%Y-%m-%d %H:%M:%S")
+    except (TypeError, ValueError):
+        return None
+
+
+def _should_refresh_session(session: dict) -> bool:
+    last_seen_at = _parse_timestamp(session.get("last_seen_at"))
+    if last_seen_at is None:
+        return True
+    return datetime.utcnow() - last_seen_at >= timedelta(minutes=settings.session_touch_interval_minutes)
 
 
 def _request_user_agent(request: Request) -> str:
@@ -204,21 +217,22 @@ def _load_session(request: Request, scope: str) -> Optional[dict]:
         conn.close()
         return None
 
-    last_seen_at = now_str()
-    expires_at = _session_expiry_str()
-    cur.execute(
-        """
-        UPDATE sessions
-        SET last_seen_at = ?, expires_at = ?, ip_address = ?, user_agent = ?
-        WHERE id = ?
-        """,
-        (last_seen_at, expires_at, get_request_ip(request), _request_user_agent(request), session["id"]),
-    )
-    conn.commit()
+    if _should_refresh_session(session):
+        last_seen_at = now_str()
+        expires_at = _session_expiry_str()
+        cur.execute(
+            """
+            UPDATE sessions
+            SET last_seen_at = ?, expires_at = ?, ip_address = ?, user_agent = ?
+            WHERE id = ?
+            """,
+            (last_seen_at, expires_at, get_request_ip(request), _request_user_agent(request), session["id"]),
+        )
+        conn.commit()
+        session["last_seen_at"] = last_seen_at
+        session["expires_at"] = expires_at
     conn.close()
 
-    session["last_seen_at"] = last_seen_at
-    session["expires_at"] = expires_at
     return session
 
 

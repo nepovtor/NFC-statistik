@@ -48,6 +48,7 @@ class Settings:
     admin_cookie_name: str
     client_cookie_name: str
     session_ttl_hours: int
+    session_touch_interval_minutes: int
     secure_cookies: bool
     login_rate_limit_attempts: int
     login_rate_limit_window_minutes: int
@@ -80,6 +81,8 @@ def validate_runtime_settings() -> None:
         raise RuntimeError("SQLITE_JOURNAL_MODE must be one of WAL, DELETE, TRUNCATE, PERSIST, MEMORY or OFF.")
     if settings.session_ttl_hours <= 0:
         raise RuntimeError("SESSION_TTL_HOURS must be greater than zero.")
+    if settings.session_touch_interval_minutes <= 0:
+        raise RuntimeError("SESSION_TOUCH_INTERVAL_MINUTES must be greater than zero.")
     if settings.login_rate_limit_attempts <= 0:
         raise RuntimeError("LOGIN_RATE_LIMIT_ATTEMPTS must be greater than zero.")
     if settings.login_rate_limit_window_minutes <= 0:
@@ -103,6 +106,7 @@ settings = Settings(
     admin_cookie_name="admin_auth",
     client_cookie_name="client_auth",
     session_ttl_hours=_env_int("SESSION_TTL_HOURS", 12),
+    session_touch_interval_minutes=_env_int("SESSION_TOUCH_INTERVAL_MINUTES", 5),
     secure_cookies=_env_flag("COOKIE_SECURE", app_env == "production"),
     login_rate_limit_attempts=_env_int("LOGIN_RATE_LIMIT_ATTEMPTS", 5),
     login_rate_limit_window_minutes=_env_int("LOGIN_RATE_LIMIT_WINDOW_MINUTES", 15),

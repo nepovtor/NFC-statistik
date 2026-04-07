@@ -21,7 +21,7 @@ from nfc_app.auth import (
     safe_client_path,
     verify_password,
 )
-from nfc_app.database import init_db
+from nfc_app.database import init_db, sync_admin_account
 from nfc_app.settings import settings
 from nfc_app.urls import build_public_tag_url
 from nfc_app.validators import is_public_http_url
@@ -53,6 +53,7 @@ def test_runtime_settings(**updates):
         "admin_login": "admin",
         "admin_password_hash": hash_password("AdminSecret123"),
         "secure_cookies": False,
+        "session_touch_interval_minutes": 5,
         "login_rate_limit_attempts": 5,
         "login_rate_limit_window_minutes": 15,
     }
@@ -146,6 +147,24 @@ class DatabaseTests(unittest.TestCase):
         self.assertIn("login_attempts", tables)
         self.assertGreaterEqual(tags_count, 4)
         self.assertEqual(admins_count, 1)
+
+    def test_sync_admin_account_updates_existing_admin_hash(self):
+        with TemporaryDirectory() as tmp_dir:
+            temp_db = Path(tmp_dir) / "test.db"
+            first_hash = hash_password("AdminSecret123")
+            second_hash = hash_password("AdminSecret456")
+
+            with test_runtime_settings(db_path=temp_db, admin_password_hash=first_hash):
+                init_db()
+
+            with test_runtime_settings(db_path=temp_db, admin_password_hash=second_hash):
+                sync_admin_account()
+
+            conn = sqlite3.connect(temp_db)
+            password_hash = conn.execute("SELECT password_hash FROM admins WHERE login = 'admin'").fetchone()[0]
+            conn.close()
+
+        self.assertEqual(password_hash, second_hash)
 
 
 class SecurityFlowTests(unittest.TestCase):
@@ -241,6 +260,37 @@ class SecurityFlowTests(unittest.TestCase):
                     )
                     self.assertEqual(blocked.status_code, 303)
                     self.assertIn("%D0%A1%D0%BB%D0%B8%D1%88%D0%BA%D0%BE%D0%BC+%D0%BC%D0%BD%D0%BE%D0%B3%D0%BE", blocked.headers["location"])
+
+    def test_session_read_does_not_touch_row_on_every_request(self):
+        with TemporaryDirectory() as tmp_dir:
+            temp_db = Path(tmp_dir) / "test.db"
+            with test_runtime_settings(db_path=temp_db, session_touch_interval_minutes=10):
+                init_db()
+                app = create_app()
+                with TestClient(app) as client:
+                    login_page = client.get("/admin/login")
+                    csrf_token = extract_csrf_token(login_page.text)
+                    login = client.post(
+                        "/admin/login",
+                        data={"login": "admin", "password": "AdminSecret123", "next": "/admin", "csrf_token": csrf_token},
+                        follow_redirects=False,
+                    )
+                    self.assertEqual(login.status_code, 303)
+
+                    conn = sqlite3.connect(temp_db)
+                    before_last_seen = conn.execute("SELECT last_seen_at FROM sessions WHERE scope = 'admin'").fetchone()[0]
+                    conn.close()
+
+                    first_dashboard = client.get("/admin")
+                    self.assertEqual(first_dashboard.status_code, 200)
+                    second_dashboard = client.get("/admin")
+                    self.assertEqual(second_dashboard.status_code, 200)
+
+                    conn = sqlite3.connect(temp_db)
+                    after_last_seen = conn.execute("SELECT last_seen_at FROM sessions WHERE scope = 'admin'").fetchone()[0]
+                    conn.close()
+
+        self.assertEqual(before_last_seen, after_last_seen)
 
 
 class AppFactoryTests(unittest.TestCase):

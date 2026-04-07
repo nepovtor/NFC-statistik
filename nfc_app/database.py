@@ -56,14 +56,6 @@ def _bootstrap_admin(cursor: sqlite3.Cursor) -> None:
     cursor.execute("SELECT id FROM admins WHERE login = ?", (settings.admin_login,))
     admin = cursor.fetchone()
     if admin:
-        cursor.execute(
-            """
-            UPDATE admins
-            SET password_hash = ?, is_active = 1
-            WHERE id = ?
-            """,
-            (settings.admin_password_hash, admin["id"]),
-        )
         return
 
     cursor.execute(
@@ -73,6 +65,45 @@ def _bootstrap_admin(cursor: sqlite3.Cursor) -> None:
         """,
         (settings.admin_login, settings.admin_password_hash, now_str()),
     )
+
+
+def sync_admin_account() -> None:
+    validate_runtime_settings()
+    assert_database_ready()
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS admins (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            login TEXT NOT NULL UNIQUE,
+            password_hash TEXT NOT NULL,
+            is_active INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL
+        )
+        """
+    )
+    cur.execute("SELECT id FROM admins WHERE login = ?", (settings.admin_login,))
+    admin = cur.fetchone()
+    if admin:
+        cur.execute(
+            """
+            UPDATE admins
+            SET password_hash = ?, is_active = 1
+            WHERE id = ?
+            """,
+            (settings.admin_password_hash, admin["id"]),
+        )
+    else:
+        cur.execute(
+            """
+            INSERT INTO admins (login, password_hash, is_active, created_at)
+            VALUES (?, ?, 1, ?)
+            """,
+            (settings.admin_login, settings.admin_password_hash, now_str()),
+        )
+    conn.commit()
+    conn.close()
 
 
 def _migration_001_base_schema(conn: sqlite3.Connection) -> None:
@@ -234,7 +265,7 @@ def assert_database_ready() -> None:
         raise RuntimeError(
             "Database migrations are pending: "
             + ", ".join(missing_migrations)
-            + ". Run `python3 -m nfc_app.database migrate` before starting the app."
+            + ". Run `python3 -m nfc_app migrate` before starting the app."
         )
 
 
@@ -251,8 +282,12 @@ def main(argv: list[str] | None = None) -> int:
         assert_database_ready()
         print(f"Database is ready: {settings.db_path}")
         return 0
+    if action == "sync-admin":
+        sync_admin_account()
+        print(f"Synchronized admin account `{settings.admin_login}` in {settings.db_path}")
+        return 0
 
-    print("Usage: python3 -m nfc_app.database [migrate|check]", file=sys.stderr)
+    print("Usage: python3 -m nfc_app.database [migrate|check|sync-admin]", file=sys.stderr)
     return 1
 
 

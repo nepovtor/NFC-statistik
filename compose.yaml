@@ -1,10 +1,32 @@
 services:
+  nfc_migrate:
+    build: .
+    container_name: nfc_app_migrate
+    restart: "no"
+    command: ["python", "-m", "nfc_app", "migrate"]
+    environment:
+      SESSION_SECRET: ${SESSION_SECRET?SESSION_SECRET is required}
+      ADMIN_LOGIN: ${ADMIN_LOGIN?ADMIN_LOGIN is required}
+      ADMIN_PASSWORD_HASH: ${ADMIN_PASSWORD_HASH?ADMIN_PASSWORD_HASH is required}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:8001}
+      NFC_STATS_DB_PATH: ${NFC_STATS_DB_PATH:-/data/nfc_stats.db}
+      COOKIE_SECURE: ${COOKIE_SECURE:-0}
+      SESSION_TOUCH_INTERVAL_MINUTES: ${SESSION_TOUCH_INTERVAL_MINUTES:-5}
+      LOGIN_RATE_LIMIT_ATTEMPTS: ${LOGIN_RATE_LIMIT_ATTEMPTS:-5}
+      LOGIN_RATE_LIMIT_WINDOW_MINUTES: ${LOGIN_RATE_LIMIT_WINDOW_MINUTES:-15}
+    volumes:
+      - ./data:/data
+
   nfc_app:
     build: .
     container_name: nfc_app
     restart: unless-stopped
+    depends_on:
+      nfc_migrate:
+        condition: service_completed_successfully
     ports:
       - "8001:8001"
+    command: ["python", "-m", "nfc_app", "serve"]
     healthcheck:
       test:
         - CMD-SHELL
@@ -20,5 +42,8 @@ services:
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:8001}
       NFC_STATS_DB_PATH: ${NFC_STATS_DB_PATH:-/data/nfc_stats.db}
       COOKIE_SECURE: ${COOKIE_SECURE:-0}
+      SESSION_TOUCH_INTERVAL_MINUTES: ${SESSION_TOUCH_INTERVAL_MINUTES:-5}
+      LOGIN_RATE_LIMIT_ATTEMPTS: ${LOGIN_RATE_LIMIT_ATTEMPTS:-5}
+      LOGIN_RATE_LIMIT_WINDOW_MINUTES: ${LOGIN_RATE_LIMIT_WINDOW_MINUTES:-15}
     volumes:
       - ./data:/data
