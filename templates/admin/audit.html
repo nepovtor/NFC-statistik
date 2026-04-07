@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% from "components/ui.html" import data_table, empty_row, page_header, panel %}
+{% from "macros.html" import logout_form %}
+
+{% block content %}
+    {% call page_header("Аудит действий", "Последние административные события и изменения в системе.") %}
+        {{ logout_form("/admin/logout", csrf_token) }}
+    {% endcall %}
+
+    {% call panel("Последние события") %}
+        <div class="small muted">Показываем последние {{ limit }} записей.</div>
+        <div class="spacer-sm"></div>
+        {% call data_table(["ID", "Дата и время", "Админ", "Действие", "Цель", "IP", "Детали"]) %}
+            {% if events %}
+                {% for row in events %}
+                    <tr>
+                        <td data-label="ID">{{ row.id }}</td>
+                        <td data-label="Дата и время">{{ row.created_at }}</td>
+                        <td data-label="Админ">{{ row.admin_login }}</td>
+                        <td data-label="Действие" class="mono">{{ row.action }}</td>
+                        <td data-label="Цель">{{ row.target_display }}</td>
+                        <td data-label="IP">{{ row.ip_address or "" }}</td>
+                        <td data-label="Детали" class="small mono">{{ row.details_display }}</td>
+                    </tr>
+                {% endfor %}
+            {% else %}
+                {{ empty_row(7, "Пока аудиторских записей нет.") }}
+            {% endif %}
+        {% endcall %}
+    {% endcall %}
+{% endblock %}

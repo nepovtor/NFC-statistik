@@ -1,0 +1,191 @@
+from __future__ import annotations
+
+from .common import rows_to_dicts
+from ..database import close_connection, commit_connection, get_connection
+
+
+def record_visit(
+    tag_code: str,
+    target_url: str,
+    visited_at: str,
+    ip_address: str,
+    user_agent: str,
+    referer: str,
+) -> None:
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        INSERT INTO visits (tag_code, target_url, visited_at, ip_address, user_agent, referer)
+        VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        (tag_code, target_url, visited_at, ip_address, user_agent, referer),
+    )
+    commit_connection(conn)
+    close_connection(conn)
+
+
+def list_admin_visit_tag_codes() -> list[str]:
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT code FROM tags ORDER BY code ASC")
+    codes = [row["code"] for row in cur.fetchall()]
+    close_connection(conn)
+    return codes
+
+
+def list_client_visit_tag_codes(client_id: int) -> list[str]:
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT code FROM tags WHERE client_id = ? ORDER BY code ASC", (client_id,))
+    codes = [row["code"] for row in cur.fetchall()]
+    close_connection(conn)
+    return codes
+
+
+def list_admin_visits(tag: str, limit: int) -> list[dict]:
+    conn = get_connection()
+    cur = conn.cursor()
+    if tag:
+        cur.execute(
+            """
+            SELECT
+                v.id,
+                v.tag_code,
+                v.target_url,
+                v.visited_at,
+                v.ip_address,
+                v.user_agent,
+                v.referer,
+                c.name AS client_name,
+                c.login AS client_login
+            FROM visits v
+            LEFT JOIN tags t ON t.code = v.tag_code
+            LEFT JOIN clients c ON c.id = t.client_id
+            WHERE v.tag_code = ?
+            ORDER BY v.id DESC
+            LIMIT ?
+            """,
+            (tag, limit),
+        )
+    else:
+        cur.execute(
+            """
+            SELECT
+                v.id,
+                v.tag_code,
+                v.target_url,
+                v.visited_at,
+                v.ip_address,
+                v.user_agent,
+                v.referer,
+                c.name AS client_name,
+                c.login AS client_login
+            FROM visits v
+            LEFT JOIN tags t ON t.code = v.tag_code
+            LEFT JOIN clients c ON c.id = t.client_id
+            ORDER BY v.id DESC
+            LIMIT ?
+            """,
+            (limit,),
+        )
+    rows = rows_to_dicts(cur.fetchall())
+    close_connection(conn)
+    return rows
+
+
+def list_admin_visits_for_export() -> list[dict]:
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT
+            v.id,
+            v.tag_code,
+            v.target_url,
+            v.visited_at,
+            v.ip_address,
+            v.user_agent,
+            v.referer,
+            c.name AS client_name,
+            c.login AS client_login
+        FROM visits v
+        LEFT JOIN tags t ON t.code = v.tag_code
+        LEFT JOIN clients c ON c.id = t.client_id
+        ORDER BY v.id DESC
+        """
+    )
+    rows = rows_to_dicts(cur.fetchall())
+    close_connection(conn)
+    return rows
+
+
+def list_client_visits(client_id: int, tag: str, limit: int) -> list[dict]:
+    conn = get_connection()
+    cur = conn.cursor()
+    if tag:
+        cur.execute(
+            """
+            SELECT
+                v.id,
+                v.tag_code,
+                v.target_url,
+                v.visited_at,
+                v.ip_address,
+                v.user_agent,
+                v.referer
+            FROM visits v
+            JOIN tags t ON t.code = v.tag_code
+            WHERE t.client_id = ? AND v.tag_code = ?
+            ORDER BY v.id DESC
+            LIMIT ?
+            """,
+            (client_id, tag, limit),
+        )
+    else:
+        cur.execute(
+            """
+            SELECT
+                v.id,
+                v.tag_code,
+                v.target_url,
+                v.visited_at,
+                v.ip_address,
+                v.user_agent,
+                v.referer
+            FROM visits v
+            JOIN tags t ON t.code = v.tag_code
+            WHERE t.client_id = ?
+            ORDER BY v.id DESC
+            LIMIT ?
+            """,
+            (client_id, limit),
+        )
+    rows = rows_to_dicts(cur.fetchall())
+    close_connection(conn)
+    return rows
+
+
+def list_client_visits_for_export(client_id: int) -> list[dict]:
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT
+            v.id,
+            v.tag_code,
+            v.target_url,
+            v.visited_at,
+            v.ip_address,
+            v.user_agent,
+            v.referer
+        FROM visits v
+        JOIN tags t ON t.code = v.tag_code
+        WHERE t.client_id = ?
+        ORDER BY v.id DESC
+        """,
+        (client_id,),
+    )
+    rows = rows_to_dicts(cur.fetchall())
+    close_connection(conn)
+    return rows

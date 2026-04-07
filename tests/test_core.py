@@ -1,17 +1,21 @@
 from __future__ import annotations
 
 import asyncio
+import io
+import os
 import sqlite3
 import unittest
 from contextlib import contextmanager
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import re
+from unittest.mock import patch
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 import httpx
 
+from nfc_app import __main__ as cli_main
 from nfc_app.app import create_app
 from nfc_app.auth import (
     get_request_ip,
@@ -198,6 +202,7 @@ class DatabaseTests(unittest.TestCase):
         self.assertIn("admins", tables)
         self.assertIn("sessions", tables)
         self.assertIn("login_attempts", tables)
+        self.assertIn("admin_audit_logs", tables)
         self.assertGreaterEqual(tags_count, 4)
         self.assertEqual(admins_count, 1)
 
@@ -541,6 +546,60 @@ class SecurityFlowTests(unittest.TestCase):
         self.assertIn("https://ref.example/path", export.text)
         self.assertNotIn("secret=1", export.text)
 
+    def test_admin_mutation_writes_audit_log_and_audit_page_shows_it(self):
+        with TemporaryDirectory() as tmp_dir:
+            temp_db = Path(tmp_dir) / "test.db"
+            with test_runtime_settings(db_path=temp_db):
+                init_db()
+                app = create_app()
+                with TestClient(app) as client:
+                    login_page = client.get("/admin/login")
+                    csrf_token = extract_csrf_token(login_page.text)
+                    login = client.post(
+                        "/admin/login",
+                        data={"login": "admin", "password": "AdminSecret123", "next": "/admin", "csrf_token": csrf_token},
+                        follow_redirects=False,
+                    )
+                    self.assertEqual(login.status_code, 303)
+
+                    clients_page = client.get("/admin/clients")
+                    clients_csrf = extract_csrf_token(clients_page.text)
+                    created = client.post(
+                        "/admin/clients/create",
+                        data={
+                            "name": "Audit Client",
+                            "login": "audit-client",
+                            "password": "AuditPass123",
+                            "csrf_token": clients_csrf,
+                        },
+                        follow_redirects=False,
+                    )
+                    self.assertEqual(created.status_code, 303)
+
+                    audit_page = client.get("/admin/audit")
+                    self.assertEqual(audit_page.status_code, 200)
+
+                conn = sqlite3.connect(temp_db)
+                audit_row = conn.execute(
+                    """
+                    SELECT action, target_type, target_label, admin_login, details_json
+                    FROM admin_audit_logs
+                    WHERE action = 'client.created'
+                    ORDER BY id DESC
+                    LIMIT 1
+                    """
+                ).fetchone()
+                conn.close()
+
+        self.assertIsNotNone(audit_row)
+        self.assertEqual(audit_row[0], "client.created")
+        self.assertEqual(audit_row[1], "client")
+        self.assertEqual(audit_row[2], "audit-client")
+        self.assertEqual(audit_row[3], "admin")
+        self.assertIn("Audit Client", audit_row[4])
+        self.assertIn("client.created", audit_page.text)
+        self.assertIn("audit-client", audit_page.text)
+
     def test_session_read_does_not_touch_row_on_every_request(self):
         with TemporaryDirectory() as tmp_dir:
             temp_db = Path(tmp_dir) / "test.db"
@@ -627,6 +686,7 @@ class AppFactoryTests(unittest.TestCase):
         self.assertIn("/healthz", route_paths)
         self.assertIn("/readyz", route_paths)
         self.assertIn("/admin", route_paths)
+        self.assertIn("/admin/audit", route_paths)
         self.assertIn("/client", route_paths)
         self.assertIn("/client/tags/{tag_id}/update", route_paths)
         self.assertIn("/go/{tag_code}", route_paths)
@@ -646,6 +706,53 @@ class AppFactoryTests(unittest.TestCase):
         payload = response.json()
         self.assertEqual(payload["status"], "not-ready")
         self.assertIn("001_base_schema", payload["pending_migrations"])
+
+
+class CliSmokeTests(unittest.TestCase):
+    def test_main_delegates_database_commands(self):
+        with patch.object(cli_main, "database_main", return_value=17) as database_entrypoint:
+            exit_code = cli_main.main(["migrate"])
+
+        database_entrypoint.assert_called_once_with(["migrate"])
+        self.assertEqual(exit_code, 17)
+
+    def test_main_runs_uvicorn_in_serve_mode(self):
+        with patch.object(cli_main, "validate_runtime_settings") as validate_settings:
+            with patch.object(cli_main, "assert_database_ready") as assert_ready:
+                with patch.object(cli_main.uvicorn, "run") as uvicorn_run:
+                    with patch.dict(os.environ, {"APP_HOST": "127.0.0.1", "APP_PORT": "9009"}, clear=False):
+                        exit_code = cli_main.main(["serve"])
+
+        self.assertEqual(exit_code, 0)
+        validate_settings.assert_called_once_with()
+        assert_ready.assert_called_once_with()
+        uvicorn_run.assert_called_once_with("main:app", host="127.0.0.1", port=9009)
+
+    def test_main_prints_usage_for_invalid_args(self):
+        stderr = io.StringIO()
+        with patch("sys.stderr", stderr):
+            exit_code = cli_main.main(["unknown"])
+
+        self.assertEqual(exit_code, 1)
+        self.assertIn("Usage: python3 -m nfc_app", stderr.getvalue())
+
+
+class DeploymentConfigTests(unittest.TestCase):
+    def test_dockerfile_runs_serve_entrypoint(self):
+        dockerfile = Path("Dockerfile").read_text(encoding="utf-8")
+        self.assertIn('CMD ["python", "-m", "nfc_app", "serve"]', dockerfile)
+        self.assertIn("USER app", dockerfile)
+
+    def test_compose_startup_flow_runs_migrations_before_runtime(self):
+        compose_text = Path("compose.yaml").read_text(encoding="utf-8")
+        production_compose_text = Path("compose.production.yaml").read_text(encoding="utf-8")
+
+        for text in (compose_text, production_compose_text):
+            self.assertIn("nfc_migrate:", text)
+            self.assertIn('command: ["python", "-m", "nfc_app", "migrate"]', text)
+            self.assertIn('command: ["python", "-m", "nfc_app", "serve"]', text)
+            self.assertIn("service_completed_successfully", text)
+            self.assertIn("/readyz", text)
 
 
 if __name__ == "__main__":

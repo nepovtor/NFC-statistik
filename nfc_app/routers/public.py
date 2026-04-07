@@ -7,7 +7,8 @@ from fastapi.responses import JSONResponse
 from fastapi.responses import RedirectResponse
 
 from ..auth import get_request_ip
-from ..database import MIGRATIONS, close_connection, commit_connection, get_connection, get_pending_migrations, now_str
+from ..database import MIGRATIONS, close_connection, get_connection, get_pending_migrations, now_str
+from ..repositories.visit_repository import record_visit
 
 router = APIRouter()
 
@@ -70,14 +71,7 @@ def go(tag_code: str, request: Request):
     referer = request.headers.get("referer", "")
     visited_at = now_str()
 
-    cur.execute(
-        """
-        INSERT INTO visits (tag_code, target_url, visited_at, ip_address, user_agent, referer)
-        VALUES (?, ?, ?, ?, ?, ?)
-        """,
-        (tag_code, tag["target_url"], visited_at, ip_address, user_agent, referer),
-    )
-    commit_connection(conn)
     close_connection(conn)
+    record_visit(tag_code, tag["target_url"], visited_at, ip_address, user_agent, referer)
 
     return RedirectResponse(url=tag["target_url"], status_code=302)

@@ -38,6 +38,7 @@ NFC-метка -> /go/{code} -> запись визита -> редирект н
 | NFC-редиректы | Одна стабильная ссылка на метку, которую можно перенаправлять куда угодно |
 | Статистика переходов | Учёт сканов и переходов по каждой метке |
 | Админка | Управление метками, ссылками, клиентами и журналом визитов |
+| Аудит действий | История критичных действий администратора |
 | Кабинет клиента | Клиент видит только свои NFC и только свою статистику |
 | Редактирование клиентом | Клиент может менять название, ссылку и статус своей метки |
 | Экспорт CSV | Выгрузка статистики для отчётов |
@@ -56,9 +57,13 @@ NFC-метка -> /go/{code} -> запись визита -> редирект н
 | `nfc_app/auth.py` | Авторизация, cookie, защита админки |
 | `nfc_app/presentation.py` | Общие redirect/CSV/chart helpers для UI |
 | `nfc_app/visit_policy.py` | Privacy-policy для визитов и retention-cutoff |
+| `nfc_app/repositories/visit_repository.py` | Запись визитов, выборки журналов и CSV-экспорт |
+| `nfc_app/repositories/analytics_repository.py` | Dashboard-метрики и аналитические SQL-запросы |
+| `nfc_app/repositories/audit_repository.py` | Сохранение и чтение admin audit log |
+| `nfc_app/services/admin_audit_service.py` | Прикладная логика аудита и подготовка audit-view |
 | `nfc_app/services/` | Прикладная логика: логины, клиенты, метки, визиты |
 | `nfc_app/repositories/` | SQL-слой и работа с данными |
-| `nfc_app/dashboard_service.py` | Данные для дашбордов |
+| `nfc_app/dashboard_service.py` | Оркестрация данных для дашбордов |
 | `nfc_app/routers/` | Админка, кабинет клиента и публичные маршруты |
 | `templates/` | Jinja-шаблоны интерфейса |
 | `static/` | Стили и статика |
@@ -236,6 +241,7 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 | `/admin/clients` | Управление клиентами |
 | `/admin/tags` | Управление метками и ссылками |
 | `/admin/visits` | Журнал переходов |
+| `/admin/audit` | Журнал критичных admin-действий |
 | `/admin/export.csv` | Экспорт общей статистики |
 | `/client/login` | Вход клиента |
 | `/client` | Кабинет клиента |
@@ -376,6 +382,15 @@ python3 -m nfc_app prune-data
 - в режиме `masked` IP маскируется до подсети, `user-agent` скрывается, а `referer` очищается от query string
 - старые визиты удаляются по `VISIT_RETENTION_DAYS` через явную команду `python3 -m nfc_app prune-data`
 - если `VISIT_RETENTION_DAYS=0`, автоматический cutoff отключён и prune-команда ничего не удалит
+
+## Audit Log
+
+Для административных изменений ведётся отдельный audit log:
+
+- логируются успешные входы и выходы администратора
+- логируются создание клиентов, создание меток, назначение владельца, toggle-операции и удаление меток
+- записи доступны в `/admin/audit`
+- в лог попадают `action`, цель действия, IP, user-agent и компактные details
 
 ## Админка только через Tailscale
 

@@ -13,16 +13,14 @@ from ..repositories.admin_repository import (
     get_tag_identity,
     list_clients_for_assignment,
     list_clients_with_stats,
-    list_tag_codes,
     list_tags_with_clients,
-    list_visits,
-    list_visits_for_export,
     toggle_client_status,
     toggle_tag_status,
 )
 from ..services.errors import ConflictError, NotFoundError, ValidationError
 from ..validators import is_public_http_url
 from ..visit_policy import sanitize_visit_rows
+from ..repositories.visit_repository import list_admin_visit_tag_codes, list_admin_visits, list_admin_visits_for_export
 
 
 def get_clients_page_data() -> dict:
@@ -121,12 +119,12 @@ def delete_tag_record(tag_id: int) -> str:
 def get_visits_page_data(tag: str, limit: int) -> dict:
     bounded_limit = max(1, min(limit, 500))
     return {
-        "tag_options": list_tag_codes(),
+        "tag_options": list_admin_visit_tag_codes(),
         "selected_tag": tag,
         "limit": bounded_limit,
-        "visits": sanitize_visit_rows(list_visits(tag, bounded_limit)),
+        "visits": sanitize_visit_rows(list_admin_visits(tag, bounded_limit)),
     }
 
 
 def get_export_rows() -> list[dict]:
-    return sanitize_visit_rows(list_visits_for_export())
+    return sanitize_visit_rows(list_admin_visits_for_export())

@@ -329,10 +329,35 @@ def _migration_003_login_attempts(conn: sqlite3.Connection) -> None:
     )
 
 
+def _migration_004_admin_audit_logs(conn: sqlite3.Connection) -> None:
+    cur = conn.cursor()
+
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS admin_audit_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            admin_id INTEGER REFERENCES admins(id) ON DELETE SET NULL,
+            admin_login TEXT NOT NULL,
+            action TEXT NOT NULL,
+            target_type TEXT NOT NULL,
+            target_id TEXT,
+            target_label TEXT,
+            ip_address TEXT,
+            user_agent TEXT,
+            details_json TEXT,
+            created_at TEXT NOT NULL
+        )
+        """
+    )
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_admin_audit_logs_created_at ON admin_audit_logs(created_at)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_admin_audit_logs_action ON admin_audit_logs(action)")
+
+
 MIGRATIONS: tuple[tuple[str, Migration], ...] = (
     ("001_base_schema", _migration_001_base_schema),
     ("002_admin_sessions", _migration_002_admin_sessions),
     ("003_login_attempts", _migration_003_login_attempts),
+    ("004_admin_audit_logs", _migration_004_admin_audit_logs),
 )
 
 

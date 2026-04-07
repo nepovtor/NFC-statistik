@@ -13,6 +13,7 @@ ADMIN_NAV_LINKS = [
     ("/admin/clients", "Клиенты"),
     ("/admin/tags", "Метки и ссылки"),
     ("/admin/visits", "Все переходы"),
+    ("/admin/audit", "Аудит"),
     ("/admin/export.csv", "Экспорт CSV"),
     ("/", "Проверка API"),
 ]

@@ -1,12 +1,10 @@
 from __future__ import annotations
 
-from ..repositories.client_repository import (
-    get_client_tag,
-    list_tag_codes_for_client,
-    list_tags_for_client,
-    list_visits_for_client,
-    list_visits_for_client_export,
-    update_client_tag,
+from ..repositories.client_repository import get_client_tag, list_tags_for_client, update_client_tag
+from ..repositories.visit_repository import (
+    list_client_visit_tag_codes,
+    list_client_visits,
+    list_client_visits_for_export,
 )
 from ..services.errors import NotFoundError, ValidationError
 from ..validators import is_public_http_url
@@ -37,12 +35,12 @@ def update_client_tag_record(client_id: int, tag_id: int, name: str, target_url:
 def get_client_visits_page_data(client_id: int, tag: str, limit: int) -> dict:
     bounded_limit = max(1, min(limit, 500))
     return {
-        "tag_options": list_tag_codes_for_client(client_id),
+        "tag_options": list_client_visit_tag_codes(client_id),
         "selected_tag": tag,
         "limit": bounded_limit,
-        "visits": sanitize_visit_rows(list_visits_for_client(client_id, tag, bounded_limit)),
+        "visits": sanitize_visit_rows(list_client_visits(client_id, tag, bounded_limit)),
     }
 
 
 def get_client_export_rows(client_id: int) -> list[dict]:
-    return sanitize_visit_rows(list_visits_for_client_export(client_id))
+    return sanitize_visit_rows(list_client_visits_for_export(client_id))

@@ -10,6 +10,7 @@ from ..auth import (
     clear_scope_cookie,
     create_admin_session,
     ensure_scope_session,
+    get_admin_session,
     get_request_ip,
     has_admin_access,
     revoke_scope_session,
@@ -33,12 +34,14 @@ from ..services.admin_service import (
     toggle_client_access,
     toggle_tag_access,
 )
+from ..services.admin_audit_service import get_admin_audit_page_data, record_admin_audit_event
 from ..services.auth_service import authenticate_admin
 from ..services.errors import ConflictError, NotFoundError, ValidationError
 from ..ui import admin_context, templates
 from ..visit_policy import sanitize_visit_rows
 
 router = APIRouter()
+
 
 def require_admin_post(request: Request, csrf_token: str, redirect_path: str) -> Optional[RedirectResponse]:
     auth_redirect = require_admin(request)
@@ -49,6 +52,36 @@ def require_admin_post(request: Request, csrf_token: str, redirect_path: str) ->
     return redirect_with_query(
         redirect_path,
         message="Сессия формы истекла. Обнови страницу и повтори действие.",
+    )
+
+
+def audit_admin_action(
+    request: Request,
+    *,
+    action: str,
+    target_type: str,
+    target_id: int | str | None = None,
+    target_label: str | None = None,
+    details: dict | None = None,
+    admin_id: int | None = None,
+    admin_login: str | None = None,
+) -> None:
+    session = get_admin_session(request) if admin_id is None or admin_login is None else None
+    resolved_admin_id = admin_id if admin_id is not None else (int(session["admin_id"]) if session and session.get("admin_id") else None)
+    resolved_admin_login = admin_login if admin_login is not None else (str(session["admin_login"]) if session and session.get("admin_login") else "")
+    if not resolved_admin_login:
+        return
+
+    record_admin_audit_event(
+        admin_id=resolved_admin_id,
+        admin_login=resolved_admin_login,
+        action=action,
+        target_type=target_type,
+        target_id=target_id,
+        target_label=target_label,
+        ip_address=get_request_ip(request),
+        user_agent=request.headers.get("user-agent", "").strip(),
+        details=details,
     )
 
 
@@ -99,6 +132,16 @@ def admin_login_submit(
     login_result = authenticate_admin(login, password, get_request_ip(request) or "unknown")
     if login_result.ok and login_result.principal_id is not None:
         _, raw_token = create_admin_session(request, login_result.principal_id)
+        audit_admin_action(
+            request,
+            action="admin.login",
+            target_type="admin",
+            target_id=login_result.principal_id,
+            target_label=login,
+            details={"next": next_path},
+            admin_id=login_result.principal_id,
+            admin_login=login,
+        )
         response = RedirectResponse(url=next_path, status_code=303)
         set_scope_cookie(response, SESSION_SCOPE_ADMIN, raw_token)
         return response
@@ -115,7 +158,18 @@ def admin_logout(request: Request, csrf_token: str = Form(...)):
     if not validate_csrf_token(request, SESSION_SCOPE_ADMIN, csrf_token):
         return redirect_with_query("/admin", message="Сессия формы истекла. Обнови страницу и повтори действие.")
 
+    session = get_admin_session(request)
     revoke_scope_session(request, SESSION_SCOPE_ADMIN)
+    if session:
+        audit_admin_action(
+            request,
+            action="admin.logout",
+            target_type="admin",
+            target_id=session.get("admin_id"),
+            target_label=session.get("admin_login"),
+            admin_id=int(session["admin_id"]) if session.get("admin_id") else None,
+            admin_login=str(session["admin_login"]),
+        )
     response = redirect_with_query("/admin/login", message="Вы вышли из админки")
     clear_scope_cookie(response, SESSION_SCOPE_ADMIN)
     return response
@@ -191,6 +245,13 @@ def admin_clients_create(
     except (ConflictError, ValidationError) as exc:
         return redirect_with_query("/admin/clients", message=str(exc))
 
+    audit_admin_action(
+        request,
+        action="client.created",
+        target_type="client",
+        target_label=login.strip().lower(),
+        details={"name": name.strip()},
+    )
     return redirect_with_query("/admin/clients", message=message)
 
 
@@ -205,6 +266,12 @@ def admin_client_toggle(client_id: int, request: Request, csrf_token: str = Form
     except NotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
+    audit_admin_action(
+        request,
+        action="client.toggled",
+        target_type="client",
+        target_id=client_id,
+    )
     return redirect_with_query("/admin/clients", message=message)
 
 
@@ -248,6 +315,13 @@ def admin_tags_create(
     except (ConflictError, ValidationError) as exc:
         return redirect_with_query("/admin/tags", message=str(exc))
 
+    audit_admin_action(
+        request,
+        action="tag.created",
+        target_type="tag",
+        target_label=code.strip().lower(),
+        details={"client_id": client_id.strip() or None},
+    )
     return redirect_with_query("/admin/tags", message=message)
 
 
@@ -264,6 +338,13 @@ def admin_tag_assign(tag_id: int, request: Request, client_id: str = Form(""), c
     except NotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
+    audit_admin_action(
+        request,
+        action="tag.owner_assigned",
+        target_type="tag",
+        target_id=tag_id,
+        details={"client_id": client_id.strip() or None},
+    )
     return redirect_with_query("/admin/tags", message=message)
 
 
@@ -278,6 +359,12 @@ def admin_tag_toggle(tag_id: int, request: Request, csrf_token: str = Form(...))
     except NotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
+    audit_admin_action(
+        request,
+        action="tag.toggled",
+        target_type="tag",
+        target_id=tag_id,
+    )
     return redirect_with_query("/admin/tags", message=message)
 
 
@@ -292,6 +379,12 @@ def admin_tag_delete(tag_id: int, request: Request, csrf_token: str = Form(...))
     except NotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
+    audit_admin_action(
+        request,
+        action="tag.deleted",
+        target_type="tag",
+        target_id=tag_id,
+    )
     return redirect_with_query("/admin/tags", message=message)
 
 
@@ -313,6 +406,27 @@ def admin_visits(request: Request, tag: str = Query(""), limit: int = Query(100)
             visits=data["visits"],
             tag_options=data["tag_options"],
             selected_tag=data["selected_tag"],
+            limit=data["limit"],
+        ),
+    )
+
+
+@router.get("/admin/audit", response_class=HTMLResponse)
+def admin_audit(request: Request, limit: int = Query(100)):
+    auth_redirect = require_admin(request)
+    if auth_redirect:
+        return auth_redirect
+
+    data = get_admin_audit_page_data(limit)
+
+    return templates.TemplateResponse(
+        request,
+        "admin/audit.html",
+        admin_context(
+            request,
+            page_title="Аудит действий",
+            active_nav="/admin/audit",
+            events=data["events"],
             limit=data["limit"],
         ),
     )
