@@ -9,6 +9,7 @@ from datetime import datetime
 from typing import Callable
 
 from .settings import settings, validate_runtime_settings
+from .visit_policy import visit_retention_cutoff
 
 
 Migration = Callable[[sqlite3.Connection], None]
@@ -382,6 +383,20 @@ def get_pending_migrations() -> list[str]:
     return [name for name, _ in MIGRATIONS if name not in applied_migrations]
 
 
+def prune_old_visit_data() -> int:
+    cutoff = visit_retention_cutoff()
+    if cutoff is None:
+        return 0
+
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM visits WHERE visited_at < ?", (cutoff,))
+    deleted_rows = max(cur.rowcount, 0)
+    conn.commit()
+    conn.close()
+    return deleted_rows
+
+
 def main(argv: list[str] | None = None) -> int:
     args = argv or sys.argv[1:]
     action = args[0] if args else "migrate"
@@ -399,8 +414,14 @@ def main(argv: list[str] | None = None) -> int:
         sync_admin_account()
         print(f"Synchronized admin account `{settings.admin_login}` in {settings.db_path}")
         return 0
+    if action == "prune-data":
+        validate_runtime_settings()
+        assert_database_ready()
+        deleted_rows = prune_old_visit_data()
+        print(f"Pruned {deleted_rows} visit rows older than retention policy from {settings.db_path}")
+        return 0
 
-    print("Usage: python3 -m nfc_app.database [migrate|check|sync-admin]", file=sys.stderr)
+    print("Usage: python3 -m nfc_app.database [migrate|check|sync-admin|prune-data]", file=sys.stderr)
     return 1
 
 

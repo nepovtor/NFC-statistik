@@ -53,6 +53,8 @@ class Settings:
     secure_cookies: bool
     login_rate_limit_attempts: int
     login_rate_limit_window_minutes: int
+    visit_data_exposure: str
+    visit_retention_days: int
     sqlite_busy_timeout_ms: int
     sqlite_journal_mode: str
     public_base_url: str
@@ -89,6 +91,10 @@ def validate_runtime_settings() -> None:
         raise RuntimeError("LOGIN_RATE_LIMIT_ATTEMPTS must be greater than zero.")
     if settings.login_rate_limit_window_minutes <= 0:
         raise RuntimeError("LOGIN_RATE_LIMIT_WINDOW_MINUTES must be greater than zero.")
+    if settings.visit_data_exposure not in {"full", "masked"}:
+        raise RuntimeError("VISIT_DATA_EXPOSURE must be either 'full' or 'masked'.")
+    if settings.visit_retention_days < 0:
+        raise RuntimeError("VISIT_RETENTION_DAYS must be zero or greater.")
     if settings.sqlite_busy_timeout_ms <= 0:
         raise RuntimeError("SQLITE_BUSY_TIMEOUT_MS must be greater than zero.")
     if settings.trust_proxy_headers and not settings.trusted_proxy_networks:
@@ -124,6 +130,8 @@ settings = Settings(
     secure_cookies=_env_flag("COOKIE_SECURE", app_env == "production"),
     login_rate_limit_attempts=_env_int("LOGIN_RATE_LIMIT_ATTEMPTS", 5),
     login_rate_limit_window_minutes=_env_int("LOGIN_RATE_LIMIT_WINDOW_MINUTES", 15),
+    visit_data_exposure=_env_first("VISIT_DATA_EXPOSURE") or ("masked" if app_env == "production" else "full"),
+    visit_retention_days=_env_int("VISIT_RETENTION_DAYS", 180),
     sqlite_busy_timeout_ms=_env_int("SQLITE_BUSY_TIMEOUT_MS", 5000),
     sqlite_journal_mode=_env_first("SQLITE_JOURNAL_MODE") or "WAL",
     public_base_url=_normalize_base_url(os.getenv("PUBLIC_BASE_URL", "")),

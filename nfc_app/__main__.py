@@ -11,10 +11,10 @@ from .settings import validate_runtime_settings
 
 def main(argv: list[str] | None = None) -> int:
     args = argv or sys.argv[1:]
-    if args and args[0] in {"migrate", "check", "sync-admin"}:
+    if args and args[0] in {"migrate", "check", "sync-admin", "prune-data"}:
         return database_main(args)
     if not args or args[0] != "serve":
-        print("Usage: python3 -m nfc_app [serve|migrate|check|sync-admin]", file=sys.stderr)
+        print("Usage: python3 -m nfc_app [serve|migrate|check|sync-admin|prune-data]", file=sys.stderr)
         return 1
 
     validate_runtime_settings()

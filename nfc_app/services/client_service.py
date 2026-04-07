@@ -10,6 +10,7 @@ from ..repositories.client_repository import (
 )
 from ..services.errors import NotFoundError, ValidationError
 from ..validators import is_public_http_url
+from ..visit_policy import sanitize_visit_rows
 
 
 def get_client_tags_page_data(client_id: int) -> dict:
@@ -39,9 +40,9 @@ def get_client_visits_page_data(client_id: int, tag: str, limit: int) -> dict:
         "tag_options": list_tag_codes_for_client(client_id),
         "selected_tag": tag,
         "limit": bounded_limit,
-        "visits": list_visits_for_client(client_id, tag, bounded_limit),
+        "visits": sanitize_visit_rows(list_visits_for_client(client_id, tag, bounded_limit)),
     }
 
 
 def get_client_export_rows(client_id: int) -> list[dict]:
-    return list_visits_for_client_export(client_id)
+    return sanitize_visit_rows(list_visits_for_client_export(client_id))

@@ -1,12 +1,9 @@
 from __future__ import annotations
 
-import csv
-import io
 from typing import Optional
-from urllib.parse import quote_plus
 
 from fastapi import APIRouter, Form, HTTPException, Query, Request
-from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from fastapi.responses import HTMLResponse, RedirectResponse
 
 from ..auth import (
     SESSION_SCOPE_ADMIN,
@@ -22,6 +19,7 @@ from ..auth import (
     validate_csrf_token,
 )
 from ..dashboard_service import get_admin_dashboard_data
+from ..presentation import build_chart_rows, csv_response, redirect_with_query
 from ..repositories.common import rows_to_dicts
 from ..services.admin_service import (
     assign_tag_owner_record,
@@ -38,30 +36,9 @@ from ..services.admin_service import (
 from ..services.auth_service import authenticate_admin
 from ..services.errors import ConflictError, NotFoundError, ValidationError
 from ..ui import admin_context, templates
+from ..visit_policy import sanitize_visit_rows
 
 router = APIRouter()
-
-
-def build_chart_rows(top_tags: list[dict]) -> list[dict]:
-    max_clicks = max([row["total_clicks"] for row in top_tags], default=1)
-    if max_clicks <= 0:
-        return []
-    chart_rows = []
-    for row in top_tags:
-        chart_rows.append(
-            {
-                "tag_code": row["tag_code"],
-                "total_clicks": row["total_clicks"],
-                "width": round((row["total_clicks"] / max_clicks) * 100, 1),
-            }
-        )
-    return chart_rows
-
-
-def admin_message_url(path: str, message: str) -> str:
-    separator = "&" if "?" in path else "?"
-    return path + separator + "message=" + quote_plus(message)
-
 
 def require_admin_post(request: Request, csrf_token: str, redirect_path: str) -> Optional[RedirectResponse]:
     auth_redirect = require_admin(request)
@@ -69,9 +46,9 @@ def require_admin_post(request: Request, csrf_token: str, redirect_path: str) ->
         return auth_redirect
     if validate_csrf_token(request, SESSION_SCOPE_ADMIN, csrf_token):
         return None
-    return RedirectResponse(
-        url=admin_message_url(redirect_path, "Сессия формы истекла. Обнови страницу и повтори действие."),
-        status_code=303,
+    return redirect_with_query(
+        redirect_path,
+        message="Сессия формы истекла. Обнови страницу и повтори действие.",
     )
 
 
@@ -111,9 +88,10 @@ def admin_login_submit(
 
     if not validate_csrf_token(request, SESSION_SCOPE_ADMIN, csrf_token):
         revoke_scope_session(request, SESSION_SCOPE_ADMIN)
-        response = RedirectResponse(
-            url="/admin/login?message=" + quote_plus("Сессия входа устарела. Обнови страницу и попробуй снова.") + "&next=" + quote_plus(next_path),
-            status_code=303,
+        response = redirect_with_query(
+            "/admin/login",
+            message="Сессия входа устарела. Обнови страницу и попробуй снова.",
+            next=next_path,
         )
         clear_scope_cookie(response, SESSION_SCOPE_ADMIN)
         return response
@@ -125,22 +103,20 @@ def admin_login_submit(
         set_scope_cookie(response, SESSION_SCOPE_ADMIN, raw_token)
         return response
 
-    return RedirectResponse(
-        url="/admin/login?message=" + quote_plus(login_result.message or "Неверный логин или пароль") + "&next=" + quote_plus(next_path),
-        status_code=303,
+    return redirect_with_query(
+        "/admin/login",
+        message=login_result.message or "Неверный логин или пароль",
+        next=next_path,
     )
 
 
 @router.post("/admin/logout")
 def admin_logout(request: Request, csrf_token: str = Form(...)):
     if not validate_csrf_token(request, SESSION_SCOPE_ADMIN, csrf_token):
-        return RedirectResponse(
-            url=admin_message_url("/admin", "Сессия формы истекла. Обнови страницу и повтори действие."),
-            status_code=303,
-        )
+        return redirect_with_query("/admin", message="Сессия формы истекла. Обнови страницу и повтори действие.")
 
     revoke_scope_session(request, SESSION_SCOPE_ADMIN)
-    response = RedirectResponse(url="/admin/login?message=" + quote_plus("Вы вышли из админки"), status_code=303)
+    response = redirect_with_query("/admin/login", message="Вы вышли из админки")
     clear_scope_cookie(response, SESSION_SCOPE_ADMIN)
     return response
 
@@ -154,7 +130,7 @@ def admin_dashboard(request: Request):
     data = get_admin_dashboard_data()
     top_tags = rows_to_dicts(data["top_tags"])
     tags = rows_to_dicts(data["tags"])
-    last_visits = rows_to_dicts(data["last_visits"])
+    last_visits = sanitize_visit_rows(rows_to_dicts(data["last_visits"]))
 
     return templates.TemplateResponse(
         request,
@@ -213,9 +189,9 @@ def admin_clients_create(
     try:
         message = create_client_account(name, login, password)
     except (ConflictError, ValidationError) as exc:
-        return RedirectResponse(url="/admin/clients?message=" + quote_plus(str(exc)), status_code=303)
+        return redirect_with_query("/admin/clients", message=str(exc))
 
-    return RedirectResponse(url="/admin/clients?message=" + quote_plus(message), status_code=303)
+    return redirect_with_query("/admin/clients", message=message)
 
 
 @router.post("/admin/clients/{client_id}/toggle")
@@ -229,7 +205,7 @@ def admin_client_toggle(client_id: int, request: Request, csrf_token: str = Form
     except NotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
-    return RedirectResponse(url="/admin/clients?message=" + quote_plus(message), status_code=303)
+    return redirect_with_query("/admin/clients", message=message)
 
 
 @router.get("/admin/tags", response_class=HTMLResponse)
@@ -270,9 +246,9 @@ def admin_tags_create(
     try:
         message = create_tag_record(code, name, target_url, client_id)
     except (ConflictError, ValidationError) as exc:
-        return RedirectResponse(url="/admin/tags?message=" + quote_plus(str(exc)), status_code=303)
+        return redirect_with_query("/admin/tags", message=str(exc))
 
-    return RedirectResponse(url="/admin/tags?message=" + quote_plus(message), status_code=303)
+    return redirect_with_query("/admin/tags", message=message)
 
 
 @router.post("/admin/tags/{tag_id}/assign")
@@ -284,11 +260,11 @@ def admin_tag_assign(tag_id: int, request: Request, client_id: str = Form(""), c
     try:
         message = assign_tag_owner_record(tag_id, client_id)
     except ValidationError as exc:
-        return RedirectResponse(url="/admin/tags?message=" + quote_plus(str(exc)), status_code=303)
+        return redirect_with_query("/admin/tags", message=str(exc))
     except NotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
-    return RedirectResponse(url="/admin/tags?message=" + quote_plus(message), status_code=303)
+    return redirect_with_query("/admin/tags", message=message)
 
 
 @router.post("/admin/tags/{tag_id}/toggle")
@@ -302,7 +278,7 @@ def admin_tag_toggle(tag_id: int, request: Request, csrf_token: str = Form(...))
     except NotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
-    return RedirectResponse(url="/admin/tags?message=" + quote_plus(message), status_code=303)
+    return redirect_with_query("/admin/tags", message=message)
 
 
 @router.post("/admin/tags/{tag_id}/delete")
@@ -316,7 +292,7 @@ def admin_tag_delete(tag_id: int, request: Request, csrf_token: str = Form(...))
     except NotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
-    return RedirectResponse(url="/admin/tags?message=" + quote_plus(message), status_code=303)
+    return redirect_with_query("/admin/tags", message=message)
 
 
 @router.get("/admin/visits", response_class=HTMLResponse)
@@ -349,29 +325,18 @@ def admin_export_csv(request: Request):
         return auth_redirect
 
     rows = get_export_rows()
-
-    output = io.StringIO()
-    writer = csv.writer(output)
-    writer.writerow(
-        ["id", "tag_code", "client_name", "client_login", "target_url", "visited_at", "ip_address", "user_agent", "referer"]
-    )
-    for row in rows:
-        writer.writerow(
-            [
-                row["id"],
-                row["tag_code"],
-                row["client_name"] or "",
-                row["client_login"] or "",
-                row["target_url"],
-                row["visited_at"],
-                row["ip_address"],
-                row["user_agent"],
-                row["referer"],
-            ]
-        )
-
-    return Response(
-        content=output.getvalue(),
-        media_type="text/csv; charset=utf-8",
-        headers={"Content-Disposition": "attachment; filename=nfc_visits.csv"},
+    return csv_response(
+        "nfc_visits.csv",
+        [
+            ("id", "id"),
+            ("tag_code", "tag_code"),
+            ("client_name", "client_name"),
+            ("client_login", "client_login"),
+            ("target_url", "target_url"),
+            ("visited_at", "visited_at"),
+            ("ip_address", "ip_address"),
+            ("user_agent", "user_agent"),
+            ("referer", "referer"),
+        ],
+        rows,
     )

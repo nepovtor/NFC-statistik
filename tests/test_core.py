@@ -23,7 +23,7 @@ from nfc_app.auth import (
     safe_client_path,
     verify_password,
 )
-from nfc_app.database import commit_connection, connection_scope, get_connection, init_db, now_str, sync_admin_account
+from nfc_app.database import commit_connection, connection_scope, get_connection, init_db, main as database_main, now_str, sync_admin_account
 from nfc_app.settings import settings
 from nfc_app.urls import build_public_tag_url
 from nfc_app.validators import is_public_http_url
@@ -58,6 +58,8 @@ def test_runtime_settings(**updates):
         "session_touch_interval_minutes": 5,
         "login_rate_limit_attempts": 5,
         "login_rate_limit_window_minutes": 15,
+        "visit_data_exposure": "full",
+        "visit_retention_days": 180,
     }
     base_updates.update(updates)
     return override_settings(**base_updates)
@@ -79,6 +81,27 @@ def asgi_get(app: FastAPI, path: str, *, client_host: str, headers: dict | None 
             follow_redirects=follow_redirects,
         ) as client:
             return await client.get(path, headers=headers)
+
+    return asyncio.run(run())
+
+
+def asgi_get_many(
+    app: FastAPI,
+    path: str,
+    *,
+    count: int,
+    client_host: str,
+    headers: dict | None = None,
+    follow_redirects: bool = True,
+):
+    async def run():
+        transport = httpx.ASGITransport(app=app, client=(client_host, 50000))
+        async with httpx.AsyncClient(
+            transport=transport,
+            base_url="http://testserver",
+            follow_redirects=follow_redirects,
+        ) as client:
+            return await asyncio.gather(*[client.get(path, headers=headers) for _ in range(count)])
 
     return asyncio.run(run())
 
@@ -222,6 +245,39 @@ class DatabaseTests(unittest.TestCase):
 
         self.assertEqual(clients_count, 1)
 
+    def test_prune_data_command_removes_visits_older_than_retention_policy(self):
+        with TemporaryDirectory() as tmp_dir:
+            temp_db = Path(tmp_dir) / "test.db"
+            with test_runtime_settings(db_path=temp_db, visit_retention_days=30):
+                init_db()
+
+                conn = sqlite3.connect(temp_db)
+                conn.execute(
+                    """
+                    INSERT INTO visits (tag_code, target_url, visited_at, ip_address, user_agent, referer)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    ("table1", "https://example.com/old", "2000-01-01 00:00:00", "203.0.113.10", "OldAgent", ""),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO visits (tag_code, target_url, visited_at, ip_address, user_agent, referer)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    ("table1", "https://example.com/new", now_str(), "203.0.113.11", "NewAgent", ""),
+                )
+                conn.commit()
+                conn.close()
+
+                exit_code = database_main(["prune-data"])
+
+                conn = sqlite3.connect(temp_db)
+                remaining_urls = [row[0] for row in conn.execute("SELECT target_url FROM visits ORDER BY id ASC").fetchall()]
+                conn.close()
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(remaining_urls, ["https://example.com/new"])
+
 
 class SecurityFlowTests(unittest.TestCase):
     def test_admin_login_requires_valid_csrf_and_logout_revokes_session(self):
@@ -319,6 +375,27 @@ class SecurityFlowTests(unittest.TestCase):
 
         self.assertEqual(ip_address, "203.0.113.20")
 
+    def test_concurrent_public_visits_are_recorded_without_dropping_rows(self):
+        with TemporaryDirectory() as tmp_dir:
+            temp_db = Path(tmp_dir) / "test.db"
+            with test_runtime_settings(db_path=temp_db):
+                init_db()
+                app = create_app()
+                responses = asgi_get_many(
+                    app,
+                    "/go/table1",
+                    count=12,
+                    client_host="127.0.0.1",
+                    follow_redirects=False,
+                )
+
+                conn = sqlite3.connect(temp_db)
+                total_visits = conn.execute("SELECT COUNT(*) FROM visits WHERE tag_code = 'table1'").fetchone()[0]
+                conn.close()
+
+        self.assertTrue(all(response.status_code == 302 for response in responses))
+        self.assertEqual(total_visits, 12)
+
     def test_admin_login_is_rate_limited_after_repeated_failures(self):
         with TemporaryDirectory() as tmp_dir:
             temp_db = Path(tmp_dir) / "test.db"
@@ -346,6 +423,123 @@ class SecurityFlowTests(unittest.TestCase):
                     )
                     self.assertEqual(blocked.status_code, 303)
                     self.assertIn("%D0%A1%D0%BB%D0%B8%D1%88%D0%BA%D0%BE%D0%BC+%D0%BC%D0%BD%D0%BE%D0%B3%D0%BE", blocked.headers["location"])
+
+    def test_client_data_is_isolated_between_different_accounts(self):
+        with TemporaryDirectory() as tmp_dir:
+            temp_db = Path(tmp_dir) / "test.db"
+            with test_runtime_settings(db_path=temp_db):
+                init_db()
+
+                conn = sqlite3.connect(temp_db)
+                alice_hash = hash_password("AlicePass123")
+                bob_hash = hash_password("BobPass123")
+                alice_cursor = conn.execute(
+                    """
+                    INSERT INTO clients (name, login, password_hash, is_active, created_at)
+                    VALUES (?, ?, ?, 1, ?)
+                    """,
+                    ("Alice", "alice", alice_hash, now_str()),
+                )
+                alice_id = alice_cursor.lastrowid
+                bob_cursor = conn.execute(
+                    """
+                    INSERT INTO clients (name, login, password_hash, is_active, created_at)
+                    VALUES (?, ?, ?, 1, ?)
+                    """,
+                    ("Bob", "bob", bob_hash, now_str()),
+                )
+                bob_id = bob_cursor.lastrowid
+                conn.execute(
+                    """
+                    INSERT INTO tags (code, name, target_url, is_active, created_at, client_id)
+                    VALUES (?, ?, ?, 1, ?, ?)
+                    """,
+                    ("alice-tag", "Alice Tag", "https://example.com/alice", now_str(), alice_id),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO tags (code, name, target_url, is_active, created_at, client_id)
+                    VALUES (?, ?, ?, 1, ?, ?)
+                    """,
+                    ("bob-tag", "Bob Tag", "https://example.com/bob", now_str(), bob_id),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO visits (tag_code, target_url, visited_at, ip_address, user_agent, referer)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    ("alice-tag", "https://example.com/alice", now_str(), "203.0.113.10", "AliceBrowser", ""),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO visits (tag_code, target_url, visited_at, ip_address, user_agent, referer)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    ("bob-tag", "https://example.com/bob", now_str(), "203.0.113.11", "BobBrowser", ""),
+                )
+                conn.commit()
+                conn.close()
+
+                app = create_app()
+                with TestClient(app) as client:
+                    login_page = client.get("/client/login")
+                    csrf_token = extract_csrf_token(login_page.text)
+                    login = client.post(
+                        "/client/login",
+                        data={"login": "alice", "password": "AlicePass123", "next": "/client", "csrf_token": csrf_token},
+                        follow_redirects=False,
+                    )
+                    self.assertEqual(login.status_code, 303)
+
+                    visits_page = client.get("/client/visits")
+                    export = client.get("/client/export.csv")
+
+        self.assertIn("alice-tag", visits_page.text)
+        self.assertNotIn("bob-tag", visits_page.text)
+        self.assertIn("alice-tag", export.text)
+        self.assertNotIn("bob-tag", export.text)
+
+    def test_admin_export_masks_sensitive_visit_fields_when_masked_mode_is_enabled(self):
+        with TemporaryDirectory() as tmp_dir:
+            temp_db = Path(tmp_dir) / "test.db"
+            with test_runtime_settings(db_path=temp_db, visit_data_exposure="masked"):
+                init_db()
+
+                conn = sqlite3.connect(temp_db)
+                conn.execute(
+                    """
+                    INSERT INTO visits (tag_code, target_url, visited_at, ip_address, user_agent, referer)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        "table1",
+                        "https://example.com/menu",
+                        now_str(),
+                        "203.0.113.42",
+                        "Mozilla/5.0 (Macintosh; Intel Mac OS X)",
+                        "https://ref.example/path?secret=1",
+                    ),
+                )
+                conn.commit()
+                conn.close()
+
+                app = create_app()
+                with TestClient(app) as client:
+                    login_page = client.get("/admin/login")
+                    csrf_token = extract_csrf_token(login_page.text)
+                    login = client.post(
+                        "/admin/login",
+                        data={"login": "admin", "password": "AdminSecret123", "next": "/admin", "csrf_token": csrf_token},
+                        follow_redirects=False,
+                    )
+                    self.assertEqual(login.status_code, 303)
+
+                    export = client.get("/admin/export.csv")
+
+        self.assertIn("203.0.113.0/24", export.text)
+        self.assertIn("hidden", export.text)
+        self.assertIn("https://ref.example/path", export.text)
+        self.assertNotIn("secret=1", export.text)
 
     def test_session_read_does_not_touch_row_on_every_request(self):
         with TemporaryDirectory() as tmp_dir:

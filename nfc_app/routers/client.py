@@ -1,12 +1,9 @@
 from __future__ import annotations
 
-import csv
-import io
 from typing import Optional
-from urllib.parse import quote_plus
 
 from fastapi import APIRouter, Form, HTTPException, Query, Request
-from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from fastapi.responses import HTMLResponse, RedirectResponse
 
 from ..auth import (
     SESSION_SCOPE_CLIENT,
@@ -22,6 +19,7 @@ from ..auth import (
     validate_csrf_token,
 )
 from ..dashboard_service import get_client_dashboard_data
+from ..presentation import build_chart_rows, csv_response, redirect_with_query
 from ..repositories.common import rows_to_dicts
 from ..services.auth_service import authenticate_client
 from ..services.client_service import (
@@ -33,30 +31,9 @@ from ..services.client_service import (
 from ..services.errors import NotFoundError, ValidationError
 from ..ui import client_context, templates
 from ..urls import build_public_tag_url, get_public_base_url
+from ..visit_policy import sanitize_visit_rows
 
 router = APIRouter()
-
-
-def build_chart_rows(top_tags: list[dict]) -> list[dict]:
-    max_clicks = max([row["total_clicks"] for row in top_tags], default=1)
-    if max_clicks <= 0:
-        return []
-    chart_rows = []
-    for row in top_tags:
-        chart_rows.append(
-            {
-                "tag_code": row["tag_code"],
-                "total_clicks": row["total_clicks"],
-                "width": round((row["total_clicks"] / max_clicks) * 100, 1),
-            }
-        )
-    return chart_rows
-
-
-def client_message_url(path: str, message: str) -> str:
-    separator = "&" if "?" in path else "?"
-    return path + separator + "message=" + quote_plus(message)
-
 
 def require_client_post(request: Request, csrf_token: str, redirect_path: str) -> Optional[RedirectResponse]:
     auth_redirect = require_client(request)
@@ -64,9 +41,9 @@ def require_client_post(request: Request, csrf_token: str, redirect_path: str) -
         return auth_redirect
     if validate_csrf_token(request, SESSION_SCOPE_CLIENT, csrf_token):
         return None
-    return RedirectResponse(
-        url=client_message_url(redirect_path, "Сессия формы истекла. Обновите страницу и повторите действие."),
-        status_code=303,
+    return redirect_with_query(
+        redirect_path,
+        message="Сессия формы истекла. Обновите страницу и повторите действие.",
     )
 
 
@@ -106,9 +83,10 @@ def client_login_submit(
 
     if not validate_csrf_token(request, SESSION_SCOPE_CLIENT, csrf_token):
         revoke_scope_session(request, SESSION_SCOPE_CLIENT)
-        response = RedirectResponse(
-            url="/client/login?message=" + quote_plus("Сессия входа устарела. Обновите страницу и попробуйте снова.") + "&next=" + quote_plus(next_path),
-            status_code=303,
+        response = redirect_with_query(
+            "/client/login",
+            message="Сессия входа устарела. Обновите страницу и попробуйте снова.",
+            next=next_path,
         )
         clear_scope_cookie(response, SESSION_SCOPE_CLIENT)
         return response
@@ -120,22 +98,20 @@ def client_login_submit(
         set_scope_cookie(response, SESSION_SCOPE_CLIENT, raw_token)
         return response
 
-    return RedirectResponse(
-        url="/client/login?message=" + quote_plus(login_result.message or "Неверный логин или пароль") + "&next=" + quote_plus(next_path),
-        status_code=303,
+    return redirect_with_query(
+        "/client/login",
+        message=login_result.message or "Неверный логин или пароль",
+        next=next_path,
     )
 
 
 @router.post("/client/logout")
 def client_logout(request: Request, csrf_token: str = Form(...)):
     if not validate_csrf_token(request, SESSION_SCOPE_CLIENT, csrf_token):
-        return RedirectResponse(
-            url=client_message_url("/client", "Сессия формы истекла. Обновите страницу и повторите действие."),
-            status_code=303,
-        )
+        return redirect_with_query("/client", message="Сессия формы истекла. Обновите страницу и повторите действие.")
 
     revoke_scope_session(request, SESSION_SCOPE_CLIENT)
-    response = RedirectResponse(url="/client/login?message=" + quote_plus("Вы вышли из личного кабинета"), status_code=303)
+    response = redirect_with_query("/client/login", message="Вы вышли из личного кабинета")
     clear_scope_cookie(response, SESSION_SCOPE_CLIENT)
     return response
 
@@ -154,7 +130,7 @@ def client_dashboard(request: Request):
     data = get_client_dashboard_data(client["id"])
     top_tags = rows_to_dicts(data["top_tags"])
     tags = rows_to_dicts(data["tags"])
-    last_visits = rows_to_dicts(data["last_visits"])
+    last_visits = sanitize_visit_rows(rows_to_dicts(data["last_visits"]))
 
     return templates.TemplateResponse(
         request,
@@ -225,11 +201,11 @@ def client_tag_update(
     try:
         message = update_client_tag_record(client["id"], tag_id, name, target_url, is_active)
     except ValidationError as exc:
-        return RedirectResponse(url="/client/tags?message=" + quote_plus(str(exc)), status_code=303)
+        return redirect_with_query("/client/tags", message=str(exc))
     except NotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
-    return RedirectResponse(url="/client/tags?message=" + quote_plus(message), status_code=303)
+    return redirect_with_query("/client/tags", message=message)
 
 
 @router.get("/client/visits", response_class=HTMLResponse)
@@ -270,25 +246,16 @@ def client_export_csv(request: Request):
         return RedirectResponse(url="/client/login", status_code=303)
 
     rows = get_client_export_rows(client["id"])
-
-    output = io.StringIO()
-    writer = csv.writer(output)
-    writer.writerow(["id", "tag_code", "target_url", "visited_at", "ip_address", "user_agent", "referer"])
-    for row in rows:
-        writer.writerow(
-            [
-                row["id"],
-                row["tag_code"],
-                row["target_url"],
-                row["visited_at"],
-                row["ip_address"],
-                row["user_agent"],
-                row["referer"],
-            ]
-        )
-
-    return Response(
-        content=output.getvalue(),
-        media_type="text/csv; charset=utf-8",
-        headers={"Content-Disposition": f"attachment; filename=client_{client['login']}_visits.csv"},
+    return csv_response(
+        f"client_{client['login']}_visits.csv",
+        [
+            ("id", "id"),
+            ("tag_code", "tag_code"),
+            ("target_url", "target_url"),
+            ("visited_at", "visited_at"),
+            ("ip_address", "ip_address"),
+            ("user_agent", "user_agent"),
+            ("referer", "referer"),
+        ],
+        rows,
     )

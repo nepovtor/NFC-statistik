@@ -52,8 +52,10 @@ NFC-метка -> /go/{code} -> запись визита -> редирект н
 | `main.py` | Точка входа |
 | `nfc_app/app.py` | Сборка FastAPI-приложения |
 | `nfc_app/settings.py` | Настройки и переменные окружения |
-| `nfc_app/database.py` | SQLite, миграции и sync-admin |
+| `nfc_app/database.py` | SQLite, миграции, sync-admin и prune-data |
 | `nfc_app/auth.py` | Авторизация, cookie, защита админки |
+| `nfc_app/presentation.py` | Общие redirect/CSV/chart helpers для UI |
+| `nfc_app/visit_policy.py` | Privacy-policy для визитов и retention-cutoff |
 | `nfc_app/services/` | Прикладная логика: логины, клиенты, метки, визиты |
 | `nfc_app/repositories/` | SQL-слой и работа с данными |
 | `nfc_app/dashboard_service.py` | Данные для дашбордов |
@@ -164,6 +166,8 @@ TRUSTED_PROXY_NETWORKS=127.0.0.1/32,::1/128
 SESSION_TOUCH_INTERVAL_MINUTES=5
 LOGIN_RATE_LIMIT_ATTEMPTS=5
 LOGIN_RATE_LIMIT_WINDOW_MINUTES=15
+VISIT_DATA_EXPOSURE=full
+VISIT_RETENTION_DAYS=180
 ```
 
 Хэш пароля администратора можно сгенерировать так:
@@ -194,6 +198,12 @@ python3 -m nfc_app serve
 
 ```bash
 python3 -m nfc_app sync-admin
+```
+
+Если нужно удалить старые визиты по retention-policy:
+
+```bash
+python3 -m nfc_app prune-data
 ```
 
 ### Вариант 3. Windows
@@ -335,6 +345,8 @@ docker compose -f compose.production.yaml --env-file .env.production up -d --bui
 - `SESSION_TOUCH_INTERVAL_MINUTES`
 - `LOGIN_RATE_LIMIT_ATTEMPTS`
 - `LOGIN_RATE_LIMIT_WINDOW_MINUTES`
+- `VISIT_DATA_EXPOSURE`
+- `VISIT_RETENTION_DAYS`
 - `ADMIN_ALLOWED_NETWORKS`
 
 Пароль администратора хранится в БД только в виде хэша. Хэш можно подготовить заранее:
@@ -348,6 +360,22 @@ python3 -m nfc_app.auth hash-password "StrongAdminPass123!"
 ```bash
 python3 -m nfc_app sync-admin
 ```
+
+Если нужно вручную применить retention-policy к уже накопленным визитам:
+
+```bash
+python3 -m nfc_app prune-data
+```
+
+## Политика данных визитов
+
+Сейчас в проекте есть явная privacy-policy для аналитики:
+
+- raw-данные визитов хранятся в БД как есть
+- UI и CSV-экспорты работают через `VISIT_DATA_EXPOSURE`
+- в режиме `masked` IP маскируется до подсети, `user-agent` скрывается, а `referer` очищается от query string
+- старые визиты удаляются по `VISIT_RETENTION_DAYS` через явную команду `python3 -m nfc_app prune-data`
+- если `VISIT_RETENTION_DAYS=0`, автоматический cutoff отключён и prune-команда ничего не удалит
 
 ## Админка только через Tailscale
 
@@ -409,6 +437,8 @@ python3 -m unittest discover -s tests -v
 - включай `TRUST_PROXY_HEADERS=1` только за реальным reverse proxy и вместе с корректным `TRUSTED_PROXY_NETWORKS`
 - при желании увеличь `SESSION_TOUCH_INTERVAL_MINUTES`, если хочешь ещё меньше write-нагрузку от сессий
 - если нужно, настрой `LOGIN_RATE_LIMIT_ATTEMPTS` и `LOGIN_RATE_LIMIT_WINDOW_MINUTES`
+- для production разумный дефолт: `VISIT_DATA_EXPOSURE=masked`
+- периодически запускай `python3 -m nfc_app prune-data`, если используешь `VISIT_RETENTION_DAYS`
 - делай резервную копию `data/nfc_stats.db`
 - не используй локальный Tailscale-режим для клиентов без Tailscale
 - если сайт остаётся на Mac, отключи сон или не давай Mac засыпать

@@ -22,6 +22,7 @@ from ..repositories.admin_repository import (
 )
 from ..services.errors import ConflictError, NotFoundError, ValidationError
 from ..validators import is_public_http_url
+from ..visit_policy import sanitize_visit_rows
 
 
 def get_clients_page_data() -> dict:
@@ -123,9 +124,9 @@ def get_visits_page_data(tag: str, limit: int) -> dict:
         "tag_options": list_tag_codes(),
         "selected_tag": tag,
         "limit": bounded_limit,
-        "visits": list_visits(tag, bounded_limit),
+        "visits": sanitize_visit_rows(list_visits(tag, bounded_limit)),
     }
 
 
 def get_export_rows() -> list[dict]:
-    return list_visits_for_export()
+    return sanitize_visit_rows(list_visits_for_export())
