@@ -1,14 +1,15 @@
 {% extends "base.html" %}
 {% from "components/ui.html" import data_table, empty_row, page_header, panel %}
-{% from "macros.html" import logout_form %}
+{% from "macros.html" import icon, logout_form %}
 
 {% block content %}
     {% call page_header("Аудит действий", "Последние административные события и изменения в системе.") %}
+        <a class="btn btn-secondary" href="/admin/visits">{{ icon('visits') }}<span>Переходы</span></a>
         <a
             class="btn btn-secondary"
             href="/admin/audit.csv?action={{ selected_action }}&admin_login={{ selected_admin_login }}&limit={{ limit }}"
         >
-            Экспорт CSV
+            {{ icon('export') }}<span>Экспорт CSV</span>
         </a>
         {{ logout_form("/admin/logout", csrf_token) }}
     {% endcall %}

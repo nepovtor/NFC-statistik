@@ -1,13 +1,13 @@
 {% macro page_header(title, subtitle='') -%}
     <div class="topbar">
-        <div>
+        <div class="topbar-copy">
             <h1 class="title">{{ title }}</h1>
             {% if subtitle %}
                 <div class="subtitle">{{ subtitle }}</div>
             {% endif %}
         </div>
         {% if caller is defined %}
-            <div class="toolbar-end">{{ caller() }}</div>
+            <div class="toolbar-end header-actions">{{ caller() }}</div>
         {% endif %}
     </div>
 {%- endmacro %}

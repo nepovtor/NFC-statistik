@@ -8,22 +8,42 @@ from .settings import settings
 
 templates = Jinja2Templates(directory=str(settings.base_dir / "templates"))
 
-ADMIN_NAV_LINKS = [
-    ("/admin", "Дашборд"),
-    ("/admin/clients", "Клиенты"),
-    ("/admin/tags", "Метки и ссылки"),
-    ("/admin/visits", "Все переходы"),
-    ("/admin/audit", "Аудит"),
-    ("/admin/export.csv", "Экспорт CSV"),
-    ("/", "Проверка API"),
+ADMIN_NAV_SECTIONS = [
+    {
+        "title": "Основное",
+        "links": [
+            {"href": "/admin", "label": "Дашборд", "icon": "dashboard"},
+            {"href": "/admin/clients", "label": "Клиенты", "icon": "clients"},
+            {"href": "/admin/tags", "label": "Метки и ссылки", "icon": "tags"},
+            {"href": "/admin/visits", "label": "Все переходы", "icon": "visits"},
+            {"href": "/admin/audit", "label": "Аудит", "icon": "audit"},
+        ],
+    },
+    {
+        "title": "Инструменты",
+        "links": [
+            {"href": "/admin/export.csv", "label": "Экспорт CSV", "icon": "export"},
+            {"href": "/", "label": "Проверка API", "icon": "pulse"},
+        ],
+    },
 ]
 
-CLIENT_NAV_LINKS = [
-    ("/client", "Дашборд"),
-    ("/client/tags", "Мои NFC"),
-    ("/client/visits", "Мои переходы"),
-    ("/client/export.csv", "Экспорт CSV"),
-    ("/client/login", "Вход"),
+CLIENT_NAV_SECTIONS = [
+    {
+        "title": "Основное",
+        "links": [
+            {"href": "/client", "label": "Дашборд", "icon": "dashboard"},
+            {"href": "/client/tags", "label": "Мои NFC", "icon": "tags"},
+            {"href": "/client/visits", "label": "Мои переходы", "icon": "visits"},
+        ],
+    },
+    {
+        "title": "Инструменты",
+        "links": [
+            {"href": "/client/export.csv", "label": "Экспорт CSV", "icon": "export"},
+            {"href": "/client/login", "label": "Вход", "icon": "login"},
+        ],
+    },
 ]
 
 
@@ -33,7 +53,7 @@ def admin_context(request: Request, page_title: str, active_nav: str | None, **c
         "page_title": page_title,
         "brand": "NFC Admin",
         "brand_subtitle": "Управление метками и клиентами",
-        "nav_links": ADMIN_NAV_LINKS,
+        "nav_sections": ADMIN_NAV_SECTIONS,
         "active_nav": active_nav,
         "csrf_token": context.pop("csrf_token", None) or get_session_csrf_token(request, SESSION_SCOPE_ADMIN),
         **context,
@@ -46,7 +66,7 @@ def client_context(request: Request, page_title: str, active_nav: str | None, **
         "page_title": page_title,
         "brand": "NFC Cabinet",
         "brand_subtitle": "Личный кабинет клиента",
-        "nav_links": CLIENT_NAV_LINKS,
+        "nav_sections": CLIENT_NAV_SECTIONS,
         "active_nav": active_nav,
         "csrf_token": context.pop("csrf_token", None) or get_session_csrf_token(request, SESSION_SCOPE_CLIENT),
         **context,

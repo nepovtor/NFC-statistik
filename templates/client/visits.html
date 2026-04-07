@@ -1,10 +1,11 @@
 {% extends "base.html" %}
 {% from "components/ui.html" import data_table, empty_row, page_header, panel %}
-{% from "macros.html" import logout_form %}
+{% from "macros.html" import icon, logout_form %}
 
 {% block content %}
     {% call page_header("Мои переходы", "Подробный журнал открытий только по вашим NFC-меткам.") %}
-        <a class="btn btn-secondary" href="/client/export.csv?tag={{ selected_tag }}&limit={{ limit }}">Экспорт CSV</a>
+        <a class="btn btn-secondary" href="/client/tags">{{ icon('tags') }}<span>Мои NFC</span></a>
+        <a class="btn btn-secondary" href="/client/export.csv?tag={{ selected_tag }}&limit={{ limit }}">{{ icon('export') }}<span>Экспорт CSV</span></a>
         {{ logout_form("/client/logout", csrf_token) }}
     {% endcall %}
 

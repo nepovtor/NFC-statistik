@@ -1,11 +1,12 @@
 {% extends "base.html" %}
 {% from "components/ui.html" import bar_chart, data_table, empty_row, hint_box, page_header, panel %}
-{% from "macros.html" import logout_form, metric_card, status_badge %}
+{% from "macros.html" import icon, logout_form, metric_card, status_badge %}
 
 {% block content %}
     {% call page_header("Личный кабинет", "Клиент: " ~ client.name ~ ". Здесь видны только ваши NFC-метки и ваши переходы.") %}
-        <a class="btn" href="/client/tags">Мои NFC</a>
-        <a class="btn btn-secondary" href="/client/visits">Переходы</a>
+        <a class="btn btn-hero" href="/client/tags">{{ icon('tags') }}<span>Открыть мои NFC</span></a>
+        <a class="btn btn-secondary" href="/client/visits">{{ icon('visits') }}<span>Переходы</span></a>
+        <a class="btn btn-secondary" href="/client/export.csv">{{ icon('export') }}<span>Скачать CSV</span></a>
         {{ logout_form("/client/logout", csrf_token) }}
     {% endcall %}
 
@@ -21,14 +22,36 @@
             {{ bar_chart(chart_rows, "Пока нет переходов.") }}
         {% endcall %}
 
-        {% call panel("Что можно делать") %}
+        {% call panel("Быстрые действия") %}
             {% call hint_box() %}
                 В кабинете можно смотреть статистику, копировать рабочие NFC-ссылки, редактировать свою ссылку назначения и выгружать данные в CSV.
             {% endcall %}
             <div class="spacer-sm"></div>
-            <div class="toolbar">
-                <a class="btn" href="/client/tags">Открыть и редактировать NFC</a>
-                <a class="btn btn-secondary" href="/client/export.csv">Скачать CSV</a>
+            <div class="action-grid">
+                <a class="action-card action-card-primary" href="/client/tags">
+                    <div class="action-card-top">
+                        <span class="action-card-icon">{{ icon('tags') }}</span>
+                        <span class="action-card-arrow">{{ icon('open') }}</span>
+                    </div>
+                    <div class="action-card-title">Мои NFC</div>
+                    <div class="action-card-text">Редактируй названия, ссылки и статусы своих меток в одном месте.</div>
+                </a>
+                <a class="action-card" href="/client/visits">
+                    <div class="action-card-top">
+                        <span class="action-card-icon">{{ icon('visits') }}</span>
+                        <span class="action-card-arrow">{{ icon('open') }}</span>
+                    </div>
+                    <div class="action-card-title">Переходы</div>
+                    <div class="action-card-text">Открой журнал и быстро проверь, какие метки сканировали чаще всего.</div>
+                </a>
+                <a class="action-card" href="/client/export.csv">
+                    <div class="action-card-top">
+                        <span class="action-card-icon">{{ icon('export') }}</span>
+                        <span class="action-card-arrow">{{ icon('open') }}</span>
+                    </div>
+                    <div class="action-card-title">Скачать CSV</div>
+                    <div class="action-card-text">Выгрузи отчёт по переходам и поделись им без доступа к кабинету.</div>
+                </a>
             </div>
         {% endcall %}
     </div>

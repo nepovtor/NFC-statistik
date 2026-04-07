@@ -1,9 +1,11 @@
 {% extends "base.html" %}
 {% from "components/ui.html" import data_table, empty_row, hint_box, page_header, panel %}
-{% from "macros.html" import csrf_input, logout_form, status_badge %}
+{% from "macros.html" import csrf_input, icon, logout_form, status_badge %}
 
 {% block content %}
     {% call page_header("Клиенты", "Здесь создаются личные кабинеты для покупателей NFC.") %}
+        <a class="btn btn-hero" href="#create-client">{{ icon('clients') }}<span>Создать кабинет</span></a>
+        <a class="btn btn-secondary" href="/admin/tags#create-tag">{{ icon('tags') }}<span>К меткам</span></a>
         {{ logout_form("/admin/logout", csrf_token) }}
     {% endcall %}
 
@@ -14,6 +16,7 @@
     {% endcall %}
 
     {% call panel("Создать клиента") %}
+        <div id="create-client" class="section-anchor"></div>
         <form method="post" action="/admin/clients/create">
             {{ csrf_input(csrf_token) }}
             <div class="forms-grid">
@@ -31,7 +34,7 @@
                 </label>
             </div>
             <div class="spacer-sm"></div>
-            <button type="submit" class="btn">Создать кабинет</button>
+            <button type="submit" class="btn btn-hero">{{ icon('clients') }}<span>Создать кабинет</span></button>
         </form>
     {% endcall %}
 

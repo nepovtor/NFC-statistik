@@ -1,13 +1,16 @@
 {% extends "base.html" %}
 {% from "components/ui.html" import data_table, empty_row, hint_box, page_header, panel %}
-{% from "macros.html" import client_identity, csrf_input, logout_form, status_badge %}
+{% from "macros.html" import client_identity, csrf_input, icon, logout_form, status_badge %}
 
 {% block content %}
     {% call page_header("Метки и ссылки", "Здесь создаются коды NFC, ссылки и назначаются владельцы.") %}
+        <a class="btn btn-hero" href="#create-tag">{{ icon('tags') }}<span>Создать метку</span></a>
+        <a class="btn btn-secondary" href="/admin/visits">{{ icon('visits') }}<span>Журнал переходов</span></a>
         {{ logout_form("/admin/logout", csrf_token) }}
     {% endcall %}
 
     {% call panel("Добавить новую метку") %}
+        <div id="create-tag" class="section-anchor"></div>
         <form method="post" action="/admin/tags/create">
             {{ csrf_input(csrf_token) }}
             <div class="forms-grid">
@@ -36,7 +39,7 @@
                 </label>
             </div>
             <div class="spacer-sm"></div>
-            <button type="submit" class="btn">Создать метку</button>
+            <button type="submit" class="btn btn-hero">{{ icon('tags') }}<span>Создать метку</span></button>
         </form>
     {% endcall %}
 

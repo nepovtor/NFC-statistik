@@ -1,3 +1,5 @@
+{% from "macros.html" import icon %}
+
 <aside class="sidebar">
     <div class="sidebar-head">
         <div>
@@ -7,9 +9,19 @@
         {% include "partials/theme_toggle.html" %}
     </div>
 
-    <nav class="nav">
-        {% for href, label in nav_links %}
-            <a href="{{ href }}" class="nav-link{% if href == active_nav %} is-active{% endif %}">{{ label }}</a>
+    <div class="nav-sections">
+        {% for section in nav_sections %}
+            <div class="nav-section">
+                <div class="nav-section-label">{{ section.title }}</div>
+                <nav class="nav">
+                    {% for link in section.links %}
+                        <a href="{{ link.href }}" class="nav-link{% if link.href == active_nav %} is-active{% endif %}">
+                            <span class="nav-link-icon">{{ icon(link.icon, 'icon') }}</span>
+                            <span class="nav-link-label">{{ link.label }}</span>
+                        </a>
+                    {% endfor %}
+                </nav>
+            </div>
         {% endfor %}
-    </nav>
+    </div>
 </aside>
