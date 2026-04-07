@@ -14,24 +14,27 @@ from ..auth import (
     create_client_session,
     ensure_scope_session,
     get_current_client,
+    get_request_ip,
     revoke_scope_session,
     require_client,
     safe_client_path,
     set_scope_cookie,
     validate_csrf_token,
-    verify_password,
 )
-from ..database import get_connection
 from ..dashboard_service import get_client_dashboard_data
+from ..repositories.common import rows_to_dicts
+from ..services.auth_service import authenticate_client
+from ..services.client_service import (
+    get_client_export_rows,
+    get_client_tags_page_data,
+    get_client_visits_page_data,
+    update_client_tag_record,
+)
+from ..services.errors import NotFoundError, ValidationError
 from ..ui import client_context, templates
 from ..urls import build_public_tag_url, get_public_base_url
-from ..validators import is_public_http_url
 
 router = APIRouter()
-
-
-def rows_to_dicts(rows) -> list[dict]:
-    return [dict(row) for row in rows]
 
 
 def build_chart_rows(top_tags: list[dict]) -> list[dict]:
@@ -110,27 +113,15 @@ def client_login_submit(
         clear_scope_cookie(response, SESSION_SCOPE_CLIENT)
         return response
 
-    conn = get_connection()
-    cur = conn.cursor()
-    cur.execute(
-        """
-        SELECT id, password_hash, is_active
-        FROM clients
-        WHERE login = ?
-        """,
-        (login,),
-    )
-    client = cur.fetchone()
-    conn.close()
-
-    if client and int(client["is_active"]) == 1 and verify_password(password, client["password_hash"]):
-        _, raw_token = create_client_session(request, client["id"])
+    login_result = authenticate_client(login, password, get_request_ip(request) or "unknown")
+    if login_result.ok and login_result.principal_id is not None:
+        _, raw_token = create_client_session(request, login_result.principal_id)
         response = RedirectResponse(url=next_path, status_code=303)
         set_scope_cookie(response, SESSION_SCOPE_CLIENT, raw_token)
         return response
 
     return RedirectResponse(
-        url="/client/login?message=" + quote_plus("Неверный логин или пароль") + "&next=" + quote_plus(next_path),
+        url="/client/login?message=" + quote_plus(login_result.message or "Неверный логин или пароль") + "&next=" + quote_plus(next_path),
         status_code=303,
     )
 
@@ -195,26 +186,7 @@ def client_tags(request: Request, message: Optional[str] = None):
     if not client:
         return RedirectResponse(url="/client/login", status_code=303)
 
-    conn = get_connection()
-    cur = conn.cursor()
-    cur.execute(
-        """
-        SELECT
-            t.id,
-            t.code,
-            t.name,
-            t.target_url,
-            t.is_active,
-            t.created_at,
-            (SELECT COUNT(*) FROM visits v WHERE v.tag_code = t.code) AS clicks
-        FROM tags t
-        WHERE t.client_id = ?
-        ORDER BY t.id DESC
-        """,
-        (client["id"],),
-    )
-    tags = rows_to_dicts(cur.fetchall())
-    conn.close()
+    tags = get_client_tags_page_data(client["id"])["tags"]
 
     for row in tags:
         row["public_url"] = build_public_tag_url(request, row["code"])
@@ -250,48 +222,14 @@ def client_tag_update(
     if not client:
         return RedirectResponse(url="/client/login", status_code=303)
 
-    name = name.strip()
-    target_url = target_url.strip()
-    is_active_value = 1 if str(is_active) == "1" else 0
+    try:
+        message = update_client_tag_record(client["id"], tag_id, name, target_url, is_active)
+    except ValidationError as exc:
+        return RedirectResponse(url="/client/tags?message=" + quote_plus(str(exc)), status_code=303)
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
-    conn = get_connection()
-    cur = conn.cursor()
-    cur.execute(
-        """
-        SELECT id, code
-        FROM tags
-        WHERE id = ? AND client_id = ?
-        """,
-        (tag_id, client["id"]),
-    )
-    tag = cur.fetchone()
-    if not tag:
-        conn.close()
-        raise HTTPException(status_code=404, detail="Метка не найдена")
-    tag_code = tag["code"]
-
-    if not name:
-        conn.close()
-        return RedirectResponse(url="/client/tags?message=" + quote_plus("Название метки не должно быть пустым"), status_code=303)
-    if not is_public_http_url(target_url):
-        conn.close()
-        return RedirectResponse(url="/client/tags?message=" + quote_plus("Ссылка должна начинаться с http:// или https://"), status_code=303)
-
-    cur.execute(
-        """
-        UPDATE tags
-        SET name = ?, target_url = ?, is_active = ?
-        WHERE id = ? AND client_id = ?
-        """,
-        (name, target_url, is_active_value, tag_id, client["id"]),
-    )
-    conn.commit()
-    conn.close()
-
-    return RedirectResponse(
-        url="/client/tags?message=" + quote_plus(f"Изменения для метки {tag_code} сохранены"),
-        status_code=303,
-    )
+    return RedirectResponse(url="/client/tags?message=" + quote_plus(message), status_code=303)
 
 
 @router.get("/client/visits", response_class=HTMLResponse)
@@ -304,53 +242,7 @@ def client_visits(request: Request, tag: str = Query(""), limit: int = Query(100
     if not client:
         return RedirectResponse(url="/client/login", status_code=303)
 
-    limit = max(1, min(limit, 500))
-    conn = get_connection()
-    cur = conn.cursor()
-
-    cur.execute("SELECT code FROM tags WHERE client_id = ? ORDER BY code ASC", (client["id"],))
-    tag_options = [row["code"] for row in cur.fetchall()]
-
-    if tag:
-        cur.execute(
-            """
-            SELECT
-                v.id,
-                v.tag_code,
-                v.target_url,
-                v.visited_at,
-                v.ip_address,
-                v.user_agent,
-                v.referer
-            FROM visits v
-            JOIN tags t ON t.code = v.tag_code
-            WHERE t.client_id = ? AND v.tag_code = ?
-            ORDER BY v.id DESC
-            LIMIT ?
-            """,
-            (client["id"], tag, limit),
-        )
-    else:
-        cur.execute(
-            """
-            SELECT
-                v.id,
-                v.tag_code,
-                v.target_url,
-                v.visited_at,
-                v.ip_address,
-                v.user_agent,
-                v.referer
-            FROM visits v
-            JOIN tags t ON t.code = v.tag_code
-            WHERE t.client_id = ?
-            ORDER BY v.id DESC
-            LIMIT ?
-            """,
-            (client["id"], limit),
-        )
-    visits = rows_to_dicts(cur.fetchall())
-    conn.close()
+    data = get_client_visits_page_data(client["id"], tag, limit)
 
     return templates.TemplateResponse(
         request,
@@ -359,10 +251,10 @@ def client_visits(request: Request, tag: str = Query(""), limit: int = Query(100
             request,
             page_title="Мои переходы",
             active_nav="/client/visits",
-            visits=visits,
-            tag_options=tag_options,
-            selected_tag=tag,
-            limit=limit,
+            visits=data["visits"],
+            tag_options=data["tag_options"],
+            selected_tag=data["selected_tag"],
+            limit=data["limit"],
         ),
     )
 
@@ -377,27 +269,7 @@ def client_export_csv(request: Request):
     if not client:
         return RedirectResponse(url="/client/login", status_code=303)
 
-    conn = get_connection()
-    cur = conn.cursor()
-    cur.execute(
-        """
-        SELECT
-            v.id,
-            v.tag_code,
-            v.target_url,
-            v.visited_at,
-            v.ip_address,
-            v.user_agent,
-            v.referer
-        FROM visits v
-        JOIN tags t ON t.code = v.tag_code
-        WHERE t.client_id = ?
-        ORDER BY v.id DESC
-        """,
-        (client["id"],),
-    )
-    rows = cur.fetchall()
-    conn.close()
+    rows = get_client_export_rows(client["id"])
 
     output = io.StringIO()
     writer = csv.writer(output)

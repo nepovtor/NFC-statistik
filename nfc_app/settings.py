@@ -49,6 +49,8 @@ class Settings:
     client_cookie_name: str
     session_ttl_hours: int
     secure_cookies: bool
+    login_rate_limit_attempts: int
+    login_rate_limit_window_minutes: int
     sqlite_busy_timeout_ms: int
     sqlite_journal_mode: str
     public_base_url: str
@@ -78,6 +80,10 @@ def validate_runtime_settings() -> None:
         raise RuntimeError("SQLITE_JOURNAL_MODE must be one of WAL, DELETE, TRUNCATE, PERSIST, MEMORY or OFF.")
     if settings.session_ttl_hours <= 0:
         raise RuntimeError("SESSION_TTL_HOURS must be greater than zero.")
+    if settings.login_rate_limit_attempts <= 0:
+        raise RuntimeError("LOGIN_RATE_LIMIT_ATTEMPTS must be greater than zero.")
+    if settings.login_rate_limit_window_minutes <= 0:
+        raise RuntimeError("LOGIN_RATE_LIMIT_WINDOW_MINUTES must be greater than zero.")
     if settings.sqlite_busy_timeout_ms <= 0:
         raise RuntimeError("SQLITE_BUSY_TIMEOUT_MS must be greater than zero.")
 
@@ -98,6 +104,8 @@ settings = Settings(
     client_cookie_name="client_auth",
     session_ttl_hours=_env_int("SESSION_TTL_HOURS", 12),
     secure_cookies=_env_flag("COOKIE_SECURE", app_env == "production"),
+    login_rate_limit_attempts=_env_int("LOGIN_RATE_LIMIT_ATTEMPTS", 5),
+    login_rate_limit_window_minutes=_env_int("LOGIN_RATE_LIMIT_WINDOW_MINUTES", 15),
     sqlite_busy_timeout_ms=_env_int("SQLITE_BUSY_TIMEOUT_MS", 5000),
     sqlite_journal_mode=_env_first("SQLITE_JOURNAL_MODE") or "WAL",
     public_base_url=_normalize_base_url(os.getenv("PUBLIC_BASE_URL", "")),

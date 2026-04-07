@@ -54,6 +54,8 @@ NFC-метка -> /go/{code} -> запись визита -> редирект н
 | `nfc_app/settings.py` | Настройки и переменные окружения |
 | `nfc_app/database.py` | SQLite и инициализация базы |
 | `nfc_app/auth.py` | Авторизация, cookie, защита админки |
+| `nfc_app/services/` | Прикладная логика: логины, клиенты, метки, визиты |
+| `nfc_app/repositories/` | SQL-слой и работа с данными |
 | `nfc_app/dashboard_service.py` | Данные для дашбордов |
 | `nfc_app/routers/` | Админка, кабинет клиента и публичные маршруты |
 | `templates/` | Jinja-шаблоны интерфейса |
@@ -155,6 +157,8 @@ ADMIN_PASSWORD_HASH=pbkdf2_sha256$200000$replace_me$replace_me
 PUBLIC_BASE_URL=http://localhost:8001
 NFC_STATS_DB_PATH=/data/nfc_stats.db
 COOKIE_SECURE=0
+LOGIN_RATE_LIMIT_ATTEMPTS=5
+LOGIN_RATE_LIMIT_WINDOW_MINUTES=15
 ```
 
 Хэш пароля администратора можно сгенерировать так:
@@ -315,6 +319,8 @@ docker compose -f compose.production.yaml --env-file .env.production up -d --bui
 - `SESSION_SECRET`
 - `ADMIN_LOGIN`
 - `ADMIN_PASSWORD_HASH`
+- `LOGIN_RATE_LIMIT_ATTEMPTS`
+- `LOGIN_RATE_LIMIT_WINDOW_MINUTES`
 - `ADMIN_ALLOWED_NETWORKS`
 
 Пароль администратора хранится в БД только в виде хэша. Хэш можно подготовить заранее:
@@ -379,6 +385,7 @@ python3 -m unittest discover -s tests -v
 - задай реальный `SESSION_SECRET`
 - используй собственный `ADMIN_LOGIN` и `ADMIN_PASSWORD_HASH`
 - для HTTPS включай `COOKIE_SECURE=1`
+- если нужно, настрой `LOGIN_RATE_LIMIT_ATTEMPTS` и `LOGIN_RATE_LIMIT_WINDOW_MINUTES`
 - делай резервную копию `data/nfc_stats.db`
 - не используй локальный Tailscale-режим для клиентов без Tailscale
 - если сайт остаётся на Mac, отключи сон или не давай Mac засыпать

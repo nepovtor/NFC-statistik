@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import csv
 import io
-import re
-import sqlite3
 from typing import Optional
 from urllib.parse import quote_plus
 
@@ -12,31 +10,36 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
 from ..auth import (
     SESSION_SCOPE_ADMIN,
-    client_exists,
     clear_scope_cookie,
     create_admin_session,
     ensure_scope_session,
-    hash_password,
+    get_request_ip,
     has_admin_access,
-    normalize_client_id,
     revoke_scope_session,
     require_admin,
     safe_admin_path,
     set_scope_cookie,
     validate_csrf_token,
-    valid_client_login,
-    verify_password,
 )
-from ..database import get_connection, now_str
 from ..dashboard_service import get_admin_dashboard_data
+from ..repositories.common import rows_to_dicts
+from ..services.admin_service import (
+    assign_tag_owner_record,
+    create_client_account,
+    create_tag_record,
+    delete_tag_record,
+    get_clients_page_data,
+    get_export_rows,
+    get_tags_page_data,
+    get_visits_page_data,
+    toggle_client_access,
+    toggle_tag_access,
+)
+from ..services.auth_service import authenticate_admin
+from ..services.errors import ConflictError, NotFoundError, ValidationError
 from ..ui import admin_context, templates
-from ..validators import is_public_http_url
 
 router = APIRouter()
-
-
-def rows_to_dicts(rows) -> list[dict]:
-    return [dict(row) for row in rows]
 
 
 def build_chart_rows(top_tags: list[dict]) -> list[dict]:
@@ -115,27 +118,15 @@ def admin_login_submit(
         clear_scope_cookie(response, SESSION_SCOPE_ADMIN)
         return response
 
-    conn = get_connection()
-    cur = conn.cursor()
-    cur.execute(
-        """
-        SELECT id, password_hash, is_active
-        FROM admins
-        WHERE login = ?
-        """,
-        (login,),
-    )
-    admin = cur.fetchone()
-    conn.close()
-
-    if admin and int(admin["is_active"]) == 1 and verify_password(password, admin["password_hash"]):
-        _, raw_token = create_admin_session(request, admin["id"])
+    login_result = authenticate_admin(login, password, get_request_ip(request) or "unknown")
+    if login_result.ok and login_result.principal_id is not None:
+        _, raw_token = create_admin_session(request, login_result.principal_id)
         response = RedirectResponse(url=next_path, status_code=303)
         set_scope_cookie(response, SESSION_SCOPE_ADMIN, raw_token)
         return response
 
     return RedirectResponse(
-        url="/admin/login?message=" + quote_plus("Неверный логин или пароль") + "&next=" + quote_plus(next_path),
+        url="/admin/login?message=" + quote_plus(login_result.message or "Неверный логин или пароль") + "&next=" + quote_plus(next_path),
         status_code=303,
     )
 
@@ -192,29 +183,7 @@ def admin_clients(request: Request, message: Optional[str] = None):
     if auth_redirect:
         return auth_redirect
 
-    conn = get_connection()
-    cur = conn.cursor()
-    cur.execute(
-        """
-        SELECT
-            c.id,
-            c.name,
-            c.login,
-            c.is_active,
-            c.created_at,
-            (SELECT COUNT(*) FROM tags t WHERE t.client_id = c.id) AS tags_count,
-            (
-                SELECT COUNT(*)
-                FROM visits v
-                JOIN tags t ON t.code = v.tag_code
-                WHERE t.client_id = c.id
-            ) AS visits_count
-        FROM clients c
-        ORDER BY c.id DESC
-        """
-    )
-    clients = rows_to_dicts(cur.fetchall())
-    conn.close()
+    clients = get_clients_page_data()["clients"]
 
     return templates.TemplateResponse(
         request,
@@ -241,40 +210,12 @@ def admin_clients_create(
     if auth_redirect:
         return auth_redirect
 
-    name = name.strip()
-    login = login.strip().lower()
-    password = password.strip()
-
-    if not name:
-        return RedirectResponse(url="/admin/clients?message=" + quote_plus("Имя клиента не должно быть пустым"), status_code=303)
-    if not valid_client_login(login):
-        return RedirectResponse(
-            url="/admin/clients?message=" + quote_plus("Логин должен быть 3-50 символов и состоять из латиницы, цифр, ., _, -, @"),
-            status_code=303,
-        )
-    if len(password) < 6:
-        return RedirectResponse(url="/admin/clients?message=" + quote_plus("Пароль клиента должен быть не короче 6 символов"), status_code=303)
-
-    conn = get_connection()
-    cur = conn.cursor()
     try:
-        cur.execute(
-            """
-            INSERT INTO clients (name, login, password_hash, is_active, created_at)
-            VALUES (?, ?, ?, 1, ?)
-            """,
-            (name, login, hash_password(password), now_str()),
-        )
-        conn.commit()
-    except sqlite3.IntegrityError:
-        conn.close()
-        return RedirectResponse(url="/admin/clients?message=" + quote_plus("Такой логин клиента уже существует"), status_code=303)
+        message = create_client_account(name, login, password)
+    except (ConflictError, ValidationError) as exc:
+        return RedirectResponse(url="/admin/clients?message=" + quote_plus(str(exc)), status_code=303)
 
-    conn.close()
-    return RedirectResponse(
-        url="/admin/clients?message=" + quote_plus("Клиент создан. Передай ему ссылку /client/login, логин и пароль."),
-        status_code=303,
-    )
+    return RedirectResponse(url="/admin/clients?message=" + quote_plus(message), status_code=303)
 
 
 @router.post("/admin/clients/{client_id}/toggle")
@@ -283,20 +224,12 @@ def admin_client_toggle(client_id: int, request: Request, csrf_token: str = Form
     if auth_redirect:
         return auth_redirect
 
-    conn = get_connection()
-    cur = conn.cursor()
-    cur.execute("SELECT is_active FROM clients WHERE id = ?", (client_id,))
-    row = cur.fetchone()
-    if not row:
-        conn.close()
-        raise HTTPException(status_code=404, detail="Клиент не найден")
+    try:
+        message = toggle_client_access(client_id)
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
-    new_status = 0 if int(row["is_active"]) == 1 else 1
-    cur.execute("UPDATE clients SET is_active = ? WHERE id = ?", (new_status, client_id))
-    conn.commit()
-    conn.close()
-
-    return RedirectResponse(url="/admin/clients?message=" + quote_plus("Статус клиента изменён"), status_code=303)
+    return RedirectResponse(url="/admin/clients?message=" + quote_plus(message), status_code=303)
 
 
 @router.get("/admin/tags", response_class=HTMLResponse)
@@ -305,32 +238,7 @@ def admin_tags(request: Request, message: Optional[str] = None):
     if auth_redirect:
         return auth_redirect
 
-    conn = get_connection()
-    cur = conn.cursor()
-    cur.execute("SELECT id, name, login, is_active FROM clients ORDER BY name ASC, login ASC")
-    clients = rows_to_dicts(cur.fetchall())
-
-    cur.execute(
-        """
-        SELECT
-            t.id,
-            t.code,
-            t.name,
-            t.target_url,
-            t.is_active,
-            t.created_at,
-            t.client_id,
-            c.name AS client_name,
-            c.login AS client_login,
-            c.is_active AS client_is_active,
-            (SELECT COUNT(*) FROM visits v WHERE v.tag_code = t.code) AS clicks
-        FROM tags t
-        LEFT JOIN clients c ON c.id = t.client_id
-        ORDER BY t.id DESC
-        """
-    )
-    tags = rows_to_dicts(cur.fetchall())
-    conn.close()
+    data = get_tags_page_data()
 
     return templates.TemplateResponse(
         request,
@@ -340,8 +248,8 @@ def admin_tags(request: Request, message: Optional[str] = None):
             page_title="Метки",
             active_nav="/admin/tags",
             message=message,
-            clients=clients,
-            tags=tags,
+            clients=data["clients"],
+            tags=data["tags"],
         ),
     )
 
@@ -359,47 +267,12 @@ def admin_tags_create(
     if auth_redirect:
         return auth_redirect
 
-    code = code.strip().lower()
-    name = (name or code).strip()
-    target_url = target_url.strip()
-
     try:
-        owner_id = normalize_client_id(client_id)
-    except ValueError:
-        return RedirectResponse(url="/admin/tags?message=" + quote_plus("Некорректный ID клиента"), status_code=303)
+        message = create_tag_record(code, name, target_url, client_id)
+    except (ConflictError, ValidationError) as exc:
+        return RedirectResponse(url="/admin/tags?message=" + quote_plus(str(exc)), status_code=303)
 
-    if not code:
-        return RedirectResponse(url="/admin/tags?message=" + quote_plus("Код не должен быть пустым"), status_code=303)
-    if not re.fullmatch(r"[a-z0-9._-]{2,80}", code):
-        return RedirectResponse(
-            url="/admin/tags?message=" + quote_plus("Код метки должен состоять из латиницы, цифр, ., _ или -"),
-            status_code=303,
-        )
-    if not is_public_http_url(target_url):
-        return RedirectResponse(url="/admin/tags?message=" + quote_plus("Ссылка должна начинаться с http:// или https://"), status_code=303)
-
-    conn = get_connection()
-    cur = conn.cursor()
-
-    if owner_id is not None and not client_exists(cur, owner_id):
-        conn.close()
-        return RedirectResponse(url="/admin/tags?message=" + quote_plus("Такой клиент не найден"), status_code=303)
-
-    try:
-        cur.execute(
-            """
-            INSERT INTO tags (code, name, target_url, is_active, created_at, client_id)
-            VALUES (?, ?, ?, 1, ?, ?)
-            """,
-            (code, name, target_url, now_str(), owner_id),
-        )
-        conn.commit()
-    except sqlite3.IntegrityError:
-        conn.close()
-        return RedirectResponse(url="/admin/tags?message=" + quote_plus("Такой код уже существует"), status_code=303)
-
-    conn.close()
-    return RedirectResponse(url="/admin/tags?message=" + quote_plus("Метка успешно создана"), status_code=303)
+    return RedirectResponse(url="/admin/tags?message=" + quote_plus(message), status_code=303)
 
 
 @router.post("/admin/tags/{tag_id}/assign")
@@ -409,27 +282,12 @@ def admin_tag_assign(tag_id: int, request: Request, client_id: str = Form(""), c
         return auth_redirect
 
     try:
-        owner_id = normalize_client_id(client_id)
-    except ValueError:
-        return RedirectResponse(url="/admin/tags?message=" + quote_plus("Некорректный ID клиента"), status_code=303)
+        message = assign_tag_owner_record(tag_id, client_id)
+    except ValidationError as exc:
+        return RedirectResponse(url="/admin/tags?message=" + quote_plus(str(exc)), status_code=303)
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
-    conn = get_connection()
-    cur = conn.cursor()
-    cur.execute("SELECT id FROM tags WHERE id = ?", (tag_id,))
-    tag = cur.fetchone()
-    if not tag:
-        conn.close()
-        raise HTTPException(status_code=404, detail="Метка не найдена")
-
-    if owner_id is not None and not client_exists(cur, owner_id):
-        conn.close()
-        return RedirectResponse(url="/admin/tags?message=" + quote_plus("Такой клиент не найден"), status_code=303)
-
-    cur.execute("UPDATE tags SET client_id = ? WHERE id = ?", (owner_id, tag_id))
-    conn.commit()
-    conn.close()
-
-    message = "Владелец метки сохранён" if owner_id is not None else "Метка отвязана от клиента"
     return RedirectResponse(url="/admin/tags?message=" + quote_plus(message), status_code=303)
 
 
@@ -439,19 +297,12 @@ def admin_tag_toggle(tag_id: int, request: Request, csrf_token: str = Form(...))
     if auth_redirect:
         return auth_redirect
 
-    conn = get_connection()
-    cur = conn.cursor()
-    cur.execute("SELECT is_active FROM tags WHERE id = ?", (tag_id,))
-    row = cur.fetchone()
-    if not row:
-        conn.close()
-        raise HTTPException(status_code=404, detail="Метка не найдена")
+    try:
+        message = toggle_tag_access(tag_id)
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
-    new_status = 0 if int(row["is_active"]) == 1 else 1
-    cur.execute("UPDATE tags SET is_active = ? WHERE id = ?", (new_status, tag_id))
-    conn.commit()
-    conn.close()
-    return RedirectResponse(url="/admin/tags?message=" + quote_plus("Статус метки изменён"), status_code=303)
+    return RedirectResponse(url="/admin/tags?message=" + quote_plus(message), status_code=303)
 
 
 @router.post("/admin/tags/{tag_id}/delete")
@@ -460,12 +311,12 @@ def admin_tag_delete(tag_id: int, request: Request, csrf_token: str = Form(...))
     if auth_redirect:
         return auth_redirect
 
-    conn = get_connection()
-    cur = conn.cursor()
-    cur.execute("DELETE FROM tags WHERE id = ?", (tag_id,))
-    conn.commit()
-    conn.close()
-    return RedirectResponse(url="/admin/tags?message=" + quote_plus("Метка удалена"), status_code=303)
+    try:
+        message = delete_tag_record(tag_id)
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    return RedirectResponse(url="/admin/tags?message=" + quote_plus(message), status_code=303)
 
 
 @router.get("/admin/visits", response_class=HTMLResponse)
@@ -474,58 +325,7 @@ def admin_visits(request: Request, tag: str = Query(""), limit: int = Query(100)
     if auth_redirect:
         return auth_redirect
 
-    limit = max(1, min(limit, 500))
-    conn = get_connection()
-    cur = conn.cursor()
-
-    cur.execute("SELECT code FROM tags ORDER BY code ASC")
-    tag_options = [row["code"] for row in cur.fetchall()]
-
-    if tag:
-        cur.execute(
-            """
-            SELECT
-                v.id,
-                v.tag_code,
-                v.target_url,
-                v.visited_at,
-                v.ip_address,
-                v.user_agent,
-                v.referer,
-                c.name AS client_name,
-                c.login AS client_login
-            FROM visits v
-            LEFT JOIN tags t ON t.code = v.tag_code
-            LEFT JOIN clients c ON c.id = t.client_id
-            WHERE v.tag_code = ?
-            ORDER BY v.id DESC
-            LIMIT ?
-            """,
-            (tag, limit),
-        )
-    else:
-        cur.execute(
-            """
-            SELECT
-                v.id,
-                v.tag_code,
-                v.target_url,
-                v.visited_at,
-                v.ip_address,
-                v.user_agent,
-                v.referer,
-                c.name AS client_name,
-                c.login AS client_login
-            FROM visits v
-            LEFT JOIN tags t ON t.code = v.tag_code
-            LEFT JOIN clients c ON c.id = t.client_id
-            ORDER BY v.id DESC
-            LIMIT ?
-            """,
-            (limit,),
-        )
-    visits = rows_to_dicts(cur.fetchall())
-    conn.close()
+    data = get_visits_page_data(tag, limit)
 
     return templates.TemplateResponse(
         request,
@@ -534,10 +334,10 @@ def admin_visits(request: Request, tag: str = Query(""), limit: int = Query(100)
             request,
             page_title="Журнал переходов",
             active_nav="/admin/visits",
-            visits=visits,
-            tag_options=tag_options,
-            selected_tag=tag,
-            limit=limit,
+            visits=data["visits"],
+            tag_options=data["tag_options"],
+            selected_tag=data["selected_tag"],
+            limit=data["limit"],
         ),
     )
 
@@ -548,28 +348,7 @@ def admin_export_csv(request: Request):
     if auth_redirect:
         return auth_redirect
 
-    conn = get_connection()
-    cur = conn.cursor()
-    cur.execute(
-        """
-        SELECT
-            v.id,
-            v.tag_code,
-            v.target_url,
-            v.visited_at,
-            v.ip_address,
-            v.user_agent,
-            v.referer,
-            c.name AS client_name,
-            c.login AS client_login
-        FROM visits v
-        LEFT JOIN tags t ON t.code = v.tag_code
-        LEFT JOIN clients c ON c.id = t.client_id
-        ORDER BY v.id DESC
-        """
-    )
-    rows = cur.fetchall()
-    conn.close()
+    rows = get_export_rows()
 
     output = io.StringIO()
     writer = csv.writer(output)

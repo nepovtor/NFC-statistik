@@ -53,6 +53,8 @@ def test_runtime_settings(**updates):
         "admin_login": "admin",
         "admin_password_hash": hash_password("AdminSecret123"),
         "secure_cookies": False,
+        "login_rate_limit_attempts": 5,
+        "login_rate_limit_window_minutes": 15,
     }
     base_updates.update(updates)
     return override_settings(**base_updates)
@@ -141,6 +143,7 @@ class DatabaseTests(unittest.TestCase):
         self.assertIn("visits", tables)
         self.assertIn("admins", tables)
         self.assertIn("sessions", tables)
+        self.assertIn("login_attempts", tables)
         self.assertGreaterEqual(tags_count, 4)
         self.assertEqual(admins_count, 1)
 
@@ -210,6 +213,34 @@ class SecurityFlowTests(unittest.TestCase):
                 conn.close()
 
         self.assertEqual(ip_address, "203.0.113.10")
+
+    def test_admin_login_is_rate_limited_after_repeated_failures(self):
+        with TemporaryDirectory() as tmp_dir:
+            temp_db = Path(tmp_dir) / "test.db"
+            with test_runtime_settings(db_path=temp_db, login_rate_limit_attempts=2, login_rate_limit_window_minutes=15):
+                init_db()
+                app = create_app()
+                with TestClient(app) as client:
+                    for _ in range(2):
+                        login_page = client.get("/admin/login")
+                        csrf_token = extract_csrf_token(login_page.text)
+                        response = client.post(
+                            "/admin/login",
+                            data={"login": "admin", "password": "WrongPassword", "next": "/admin", "csrf_token": csrf_token},
+                            follow_redirects=False,
+                        )
+                        self.assertEqual(response.status_code, 303)
+                        self.assertIn("/admin/login?message=", response.headers["location"])
+
+                    blocked_login_page = client.get("/admin/login")
+                    blocked_csrf_token = extract_csrf_token(blocked_login_page.text)
+                    blocked = client.post(
+                        "/admin/login",
+                        data={"login": "admin", "password": "AdminSecret123", "next": "/admin", "csrf_token": blocked_csrf_token},
+                        follow_redirects=False,
+                    )
+                    self.assertEqual(blocked.status_code, 303)
+                    self.assertIn("%D0%A1%D0%BB%D0%B8%D1%88%D0%BA%D0%BE%D0%BC+%D0%BC%D0%BD%D0%BE%D0%B3%D0%BE", blocked.headers["location"])
 
 
 class AppFactoryTests(unittest.TestCase):

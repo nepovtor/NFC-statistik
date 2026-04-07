@@ -46,6 +46,7 @@
 - FastAPI-приложение с разделением на роутеры, сервисный слой и шаблоны
 - SQLite для быстрого self-hosted сценария
 - серверные сессии, CSRF-защита форм и безопасные cookie
+- DB-backed rate limiting для login-flow
 - клиентские кабинеты с разграничением доступа
 - real client IP за reverse proxy и технические `/healthz` + `/readyz`
 - отдельный bootstrap/migrate-step для схемы БД

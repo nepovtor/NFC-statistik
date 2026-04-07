@@ -166,9 +166,33 @@ def _migration_002_admin_sessions(conn: sqlite3.Connection) -> None:
     _bootstrap_admin(cur)
 
 
+def _migration_003_login_attempts(conn: sqlite3.Connection) -> None:
+    cur = conn.cursor()
+
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS login_attempts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            scope TEXT NOT NULL,
+            login_key TEXT NOT NULL,
+            ip_address TEXT NOT NULL,
+            was_success INTEGER NOT NULL DEFAULT 0,
+            attempted_at TEXT NOT NULL
+        )
+        """
+    )
+    cur.execute(
+        "CREATE INDEX IF NOT EXISTS idx_login_attempts_scope_login_time ON login_attempts(scope, login_key, attempted_at)"
+    )
+    cur.execute(
+        "CREATE INDEX IF NOT EXISTS idx_login_attempts_scope_ip_time ON login_attempts(scope, ip_address, attempted_at)"
+    )
+
+
 MIGRATIONS: tuple[tuple[str, Migration], ...] = (
     ("001_base_schema", _migration_001_base_schema),
     ("002_admin_sessions", _migration_002_admin_sessions),
+    ("003_login_attempts", _migration_003_login_attempts),
 )
 
 
