@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ipaddress
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -57,6 +58,7 @@ class Settings:
     public_base_url: str
     admin_tailscale_only: bool
     trust_proxy_headers: bool
+    trusted_proxy_networks: tuple[str, ...]
     admin_allowed_networks: tuple[str, ...]
     default_tags: dict[str, str] = field(default_factory=dict)
 
@@ -89,6 +91,18 @@ def validate_runtime_settings() -> None:
         raise RuntimeError("LOGIN_RATE_LIMIT_WINDOW_MINUTES must be greater than zero.")
     if settings.sqlite_busy_timeout_ms <= 0:
         raise RuntimeError("SQLITE_BUSY_TIMEOUT_MS must be greater than zero.")
+    if settings.trust_proxy_headers and not settings.trusted_proxy_networks:
+        raise RuntimeError("TRUSTED_PROXY_NETWORKS must not be empty when TRUST_PROXY_HEADERS is enabled.")
+
+    for network_name, network_values in (
+        ("TRUSTED_PROXY_NETWORKS", settings.trusted_proxy_networks),
+        ("ADMIN_ALLOWED_NETWORKS", settings.admin_allowed_networks),
+    ):
+        for network_value in network_values:
+            try:
+                ipaddress.ip_network(network_value, strict=False)
+            except ValueError as exc:
+                raise RuntimeError(f"{network_name} contains an invalid network: {network_value}") from exc
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -115,6 +129,12 @@ settings = Settings(
     public_base_url=_normalize_base_url(os.getenv("PUBLIC_BASE_URL", "")),
     admin_tailscale_only=_env_flag("ADMIN_TAILSCALE_ONLY", False),
     trust_proxy_headers=_env_flag("TRUST_PROXY_HEADERS", False),
+    trusted_proxy_networks=_split_csv(
+        os.getenv(
+            "TRUSTED_PROXY_NETWORKS",
+            "127.0.0.1/32,::1/128",
+        )
+    ),
     admin_allowed_networks=_split_csv(
         os.getenv(
             "ADMIN_ALLOWED_NETWORKS",

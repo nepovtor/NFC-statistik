@@ -159,6 +159,8 @@ ADMIN_PASSWORD_HASH=pbkdf2_sha256$200000$replace_me$replace_me
 PUBLIC_BASE_URL=http://localhost:8001
 NFC_STATS_DB_PATH=/data/nfc_stats.db
 COOKIE_SECURE=0
+TRUST_PROXY_HEADERS=0
+TRUSTED_PROXY_NETWORKS=127.0.0.1/32,::1/128
 SESSION_TOUCH_INTERVAL_MINUTES=5
 LOGIN_RATE_LIMIT_ATTEMPTS=5
 LOGIN_RATE_LIMIT_WINDOW_MINUTES=15
@@ -313,6 +315,7 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 - проксирует запросы в FastAPI
 - приложение строит NFC-ссылки от домена
 - админка пускает только `localhost` и Tailscale
+- forwarded headers доверяются только от сетей из `TRUSTED_PROXY_NETWORKS`
 
 Запуск:
 
@@ -328,6 +331,7 @@ docker compose -f compose.production.yaml --env-file .env.production up -d --bui
 - `SESSION_SECRET`
 - `ADMIN_LOGIN`
 - `ADMIN_PASSWORD_HASH`
+- `TRUSTED_PROXY_NETWORKS`
 - `SESSION_TOUCH_INTERVAL_MINUTES`
 - `LOGIN_RATE_LIMIT_ATTEMPTS`
 - `LOGIN_RATE_LIMIT_WINDOW_MINUTES`
@@ -402,6 +406,7 @@ python3 -m unittest discover -s tests -v
 - используй собственный `ADMIN_LOGIN` и `ADMIN_PASSWORD_HASH`
 - при необходимости меняй `ADMIN_PASSWORD_HASH` через явный `python3 -m nfc_app sync-admin`
 - для HTTPS включай `COOKIE_SECURE=1`
+- включай `TRUST_PROXY_HEADERS=1` только за реальным reverse proxy и вместе с корректным `TRUSTED_PROXY_NETWORKS`
 - при желании увеличь `SESSION_TOUCH_INTERVAL_MINUTES`, если хочешь ещё меньше write-нагрузку от сессий
 - если нужно, настрой `LOGIN_RATE_LIMIT_ATTEMPTS` и `LOGIN_RATE_LIMIT_WINDOW_MINUTES`
 - делай резервную копию `data/nfc_stats.db`

@@ -15,7 +15,7 @@ from urllib.parse import quote_plus
 from fastapi import Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
-from .database import get_connection, now_str
+from .database import close_connection, commit_connection, get_connection, now_str
 from .settings import settings
 
 SESSION_SCOPE_ADMIN = "admin"
@@ -33,37 +33,19 @@ def get_next_path(request: Request) -> str:
     return request.url.path + (f"?{request.url.query}" if request.url.query else "")
 
 
-def _get_forwarded_ip(request: Request) -> Optional[str]:
-    if not settings.trust_proxy_headers:
-        return None
-
-    forwarded_for = request.headers.get("x-forwarded-for", "")
-    if forwarded_for:
-        first_hop = forwarded_for.split(",", 1)[0].strip()
-        if first_hop:
-            return first_hop
-
-    real_ip = request.headers.get("x-real-ip", "").strip()
-    return real_ip or None
-
-
-def get_request_ip(request: Request) -> Optional[str]:
-    forwarded_ip = _get_forwarded_ip(request)
-    if forwarded_ip:
-        return forwarded_ip
-
+def _request_peer_ip(request: Request) -> Optional[str]:
     if request.client:
         return request.client.host
     return None
 
 
-def is_ip_allowed_for_admin(ip_value: str) -> bool:
+def _is_ip_in_networks(ip_value: str, network_values: tuple[str, ...]) -> bool:
     try:
         ip = ipaddress.ip_address(ip_value)
     except ValueError:
         return False
 
-    for network_value in settings.admin_allowed_networks:
+    for network_value in network_values:
         try:
             network = ipaddress.ip_network(network_value, strict=False)
         except ValueError:
@@ -71,6 +53,52 @@ def is_ip_allowed_for_admin(ip_value: str) -> bool:
         if ip in network:
             return True
     return False
+
+
+def _normalize_ip_value(ip_value: str) -> Optional[str]:
+    candidate = ip_value.strip()
+    if not candidate:
+        return None
+    try:
+        return str(ipaddress.ip_address(candidate))
+    except ValueError:
+        return None
+
+
+def _is_trusted_proxy_request(request: Request) -> bool:
+    if not settings.trust_proxy_headers:
+        return False
+
+    peer_ip = _request_peer_ip(request)
+    if not peer_ip:
+        return False
+    return _is_ip_in_networks(peer_ip, settings.trusted_proxy_networks)
+
+
+def _get_forwarded_ip(request: Request) -> Optional[str]:
+    if not _is_trusted_proxy_request(request):
+        return None
+
+    forwarded_for = request.headers.get("x-forwarded-for", "")
+    if forwarded_for:
+        first_hop = forwarded_for.split(",", 1)[0].strip()
+        normalized_ip = _normalize_ip_value(first_hop)
+        if normalized_ip:
+            return normalized_ip
+
+    return _normalize_ip_value(request.headers.get("x-real-ip", ""))
+
+
+def get_request_ip(request: Request) -> Optional[str]:
+    forwarded_ip = _get_forwarded_ip(request)
+    if forwarded_ip:
+        return forwarded_ip
+
+    return _request_peer_ip(request)
+
+
+def is_ip_allowed_for_admin(ip_value: str) -> bool:
+    return _is_ip_in_networks(ip_value, settings.admin_allowed_networks)
 
 
 def is_admin_request_allowed(request: Request) -> bool:
@@ -205,16 +233,16 @@ def _load_session(request: Request, scope: str) -> Optional[dict]:
     )
     row = cur.fetchone()
     if not row:
-        conn.close()
+        close_connection(conn)
         return None
 
     session = dict(row)
 
     if session["principal_type"] == SESSION_PRINCIPAL_ADMIN and (not session["admin_id"] or int(session["admin_is_active"] or 0) != 1):
-        conn.close()
+        close_connection(conn)
         return None
     if session["principal_type"] == SESSION_PRINCIPAL_CLIENT and (not session["client_id"] or int(session["client_is_active"] or 0) != 1):
-        conn.close()
+        close_connection(conn)
         return None
 
     if _should_refresh_session(session):
@@ -228,10 +256,10 @@ def _load_session(request: Request, scope: str) -> Optional[dict]:
             """,
             (last_seen_at, expires_at, get_request_ip(request), _request_user_agent(request), session["id"]),
         )
-        conn.commit()
+        commit_connection(conn)
         session["last_seen_at"] = last_seen_at
         session["expires_at"] = expires_at
-    conn.close()
+    close_connection(conn)
 
     return session
 
@@ -310,7 +338,7 @@ def _create_session(
         ),
     )
     session["id"] = cur.lastrowid
-    conn.commit()
+    commit_connection(conn)
 
     if admin_id is not None:
         cur.execute("SELECT login, is_active FROM admins WHERE id = ?", (admin_id,))
@@ -335,7 +363,7 @@ def _create_session(
             session["client_is_active"] = client_row["is_active"]
             session["client_created_at"] = client_row["created_at"]
 
-    conn.close()
+    close_connection(conn)
     _set_cached_session(request, scope, session)
     return session, raw_token
 
@@ -443,8 +471,8 @@ def _rotate_session(
             updated_session["client_is_active"] = client_row["is_active"]
             updated_session["client_created_at"] = client_row["created_at"]
 
-    conn.commit()
-    conn.close()
+    commit_connection(conn)
+    close_connection(conn)
     _set_cached_session(request, scope, updated_session)
     return updated_session, raw_token
 
@@ -468,8 +496,8 @@ def revoke_scope_session(request: Request, scope: str) -> None:
         "UPDATE sessions SET revoked_at = ? WHERE id = ?",
         (now_str(), session["id"]),
     )
-    conn.commit()
-    conn.close()
+    commit_connection(conn)
+    close_connection(conn)
     _set_cached_session(request, scope, None)
 
 

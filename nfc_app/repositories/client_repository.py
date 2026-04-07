@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from .common import rows_to_dicts
-from ..database import get_connection
+from ..database import close_connection, commit_connection, get_connection
 
 
 def list_tags_for_client(client_id: int) -> list[dict]:
@@ -24,7 +24,7 @@ def list_tags_for_client(client_id: int) -> list[dict]:
         (client_id,),
     )
     rows = rows_to_dicts(cur.fetchall())
-    conn.close()
+    close_connection(conn)
     return rows
 
 
@@ -40,7 +40,7 @@ def get_client_tag(tag_id: int, client_id: int) -> dict | None:
         (tag_id, client_id),
     )
     row = cur.fetchone()
-    conn.close()
+    close_connection(conn)
     return dict(row) if row else None
 
 
@@ -55,8 +55,8 @@ def update_client_tag(tag_id: int, client_id: int, name: str, target_url: str, i
         """,
         (name, target_url, is_active, tag_id, client_id),
     )
-    conn.commit()
-    conn.close()
+    commit_connection(conn)
+    close_connection(conn)
 
 
 def list_tag_codes_for_client(client_id: int) -> list[str]:
@@ -64,7 +64,7 @@ def list_tag_codes_for_client(client_id: int) -> list[str]:
     cur = conn.cursor()
     cur.execute("SELECT code FROM tags WHERE client_id = ? ORDER BY code ASC", (client_id,))
     codes = [row["code"] for row in cur.fetchall()]
-    conn.close()
+    close_connection(conn)
     return codes
 
 
@@ -110,7 +110,7 @@ def list_visits_for_client(client_id: int, tag: str, limit: int) -> list[dict]:
             (client_id, limit),
         )
     rows = rows_to_dicts(cur.fetchall())
-    conn.close()
+    close_connection(conn)
     return rows
 
 
@@ -135,5 +135,5 @@ def list_visits_for_client_export(client_id: int) -> list[dict]:
         (client_id,),
     )
     rows = rows_to_dicts(cur.fetchall())
-    conn.close()
+    close_connection(conn)
     return rows

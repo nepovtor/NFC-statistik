@@ -7,7 +7,7 @@ from fastapi.responses import JSONResponse
 from fastapi.responses import RedirectResponse
 
 from ..auth import get_request_ip
-from ..database import get_connection, now_str
+from ..database import MIGRATIONS, close_connection, commit_connection, get_connection, get_pending_migrations, now_str
 
 router = APIRouter()
 
@@ -32,15 +32,20 @@ def healthz() -> dict:
 @router.get("/readyz")
 def readyz():
     try:
-        conn = get_connection()
-        cur = conn.cursor()
-        cur.execute("SELECT COUNT(*) AS total FROM schema_migrations")
-        migrations_total = cur.fetchone()["total"]
-        conn.close()
+        pending_migrations = get_pending_migrations()
     except sqlite3.Error as exc:
         return JSONResponse(status_code=503, content={"status": "not-ready", "detail": str(exc)})
 
-    return {"status": "ready", "migrations_applied": migrations_total}
+    if pending_migrations:
+        return JSONResponse(
+            status_code=503,
+            content={
+                "status": "not-ready",
+                "pending_migrations": pending_migrations,
+            },
+        )
+
+    return {"status": "ready", "migrations_applied": len(MIGRATIONS)}
 
 
 @router.get("/go/{tag_code}")
@@ -54,10 +59,10 @@ def go(tag_code: str, request: Request):
     tag = cur.fetchone()
 
     if not tag:
-        conn.close()
+        close_connection(conn)
         raise HTTPException(status_code=404, detail="Такой NFC-код не найден")
     if int(tag["is_active"]) != 1:
-        conn.close()
+        close_connection(conn)
         raise HTTPException(status_code=403, detail="Эта NFC-метка выключена")
 
     ip_address = get_request_ip(request) or "unknown"
@@ -72,7 +77,7 @@ def go(tag_code: str, request: Request):
         """,
         (tag_code, tag["target_url"], visited_at, ip_address, user_agent, referer),
     )
-    conn.commit()
-    conn.close()
+    commit_connection(conn)
+    close_connection(conn)
 
     return RedirectResponse(url=tag["target_url"], status_code=302)

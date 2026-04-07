@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from ..database import get_connection, now_str
+from ..database import close_connection, commit_connection, get_connection, now_str
 
 
 def get_admin_auth_record(login: str) -> dict | None:
@@ -15,7 +15,7 @@ def get_admin_auth_record(login: str) -> dict | None:
         (login,),
     )
     row = cur.fetchone()
-    conn.close()
+    close_connection(conn)
     return dict(row) if row else None
 
 
@@ -31,7 +31,7 @@ def get_client_auth_record(login: str) -> dict | None:
         (login,),
     )
     row = cur.fetchone()
-    conn.close()
+    close_connection(conn)
     return dict(row) if row else None
 
 
@@ -45,8 +45,8 @@ def record_login_attempt(scope: str, login_key: str, ip_address: str, was_succes
         """,
         (scope, login_key, ip_address, 1 if was_success else 0, now_str()),
     )
-    conn.commit()
-    conn.close()
+    commit_connection(conn)
+    close_connection(conn)
 
 
 def clear_failed_login_attempts(scope: str, login_key: str, ip_address: str) -> None:
@@ -61,8 +61,8 @@ def clear_failed_login_attempts(scope: str, login_key: str, ip_address: str) -> 
         """,
         (scope, login_key, ip_address),
     )
-    conn.commit()
-    conn.close()
+    commit_connection(conn)
+    close_connection(conn)
 
 
 def count_recent_failed_attempts_by_login(scope: str, login_key: str, since_time: str) -> int:
@@ -83,7 +83,7 @@ def count_recent_failed_attempts_by_login(scope: str, login_key: str, since_time
         (scope, login_key, since_time),
     )
     total = int(cur.fetchone()["total"])
-    conn.close()
+    close_connection(conn)
     return total
 
 
@@ -102,7 +102,7 @@ def count_recent_failed_attempts_by_ip(scope: str, ip_address: str, since_time: 
         (scope, ip_address, since_time),
     )
     total = int(cur.fetchone()["total"])
-    conn.close()
+    close_connection(conn)
     return total
 
 
@@ -138,12 +138,12 @@ def get_oldest_recent_failed_attempt(scope: str, login_key: str, ip_address: str
             (scope, since_time, ip_address),
         )
     row = cur.fetchone()
-    conn.close()
+    close_connection(conn)
     return row["attempted_at"] if row else None
 
 
 def prune_login_attempts(before_time: str) -> None:
     conn = get_connection()
     conn.execute("DELETE FROM login_attempts WHERE attempted_at < ?", (before_time,))
-    conn.commit()
-    conn.close()
+    commit_connection(conn)
+    close_connection(conn)

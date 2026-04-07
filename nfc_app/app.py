@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from .auth import admin_tailscale_block_response, is_admin_request_allowed
-from .database import assert_database_ready
+from .database import assert_database_ready, connection_scope
 from .routers import admin_router, client_router, public_router
 from .settings import settings, validate_runtime_settings
 
@@ -20,6 +20,11 @@ async def lifespan(app: FastAPI):
 
 def create_app() -> FastAPI:
     app = FastAPI(title=settings.app_title, version=settings.app_version, lifespan=lifespan)
+
+    @app.middleware("http")
+    async def database_unit_of_work(request, call_next):
+        with connection_scope():
+            return await call_next(request)
 
     @app.middleware("http")
     async def admin_network_guard(request, call_next):

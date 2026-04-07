@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 
-from .database import get_connection
+from .database import close_connection, get_connection
 
 
 def get_admin_dashboard_data() -> dict:
@@ -78,7 +78,7 @@ def get_admin_dashboard_data() -> dict:
         """
     )
     last_visits = cur.fetchall()
-    conn.close()
+    close_connection(conn)
 
     return {
         "total_visits": total_visits,
@@ -188,7 +188,7 @@ def get_client_dashboard_data(client_id: int) -> dict:
         (client_id,),
     )
     last_visits = cur.fetchall()
-    conn.close()
+    close_connection(conn)
 
     return {
         "total_tags": total_tags,

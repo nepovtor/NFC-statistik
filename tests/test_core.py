@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import sqlite3
 import unittest
 from contextlib import contextmanager
@@ -9,6 +10,7 @@ import re
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+import httpx
 
 from nfc_app.app import create_app
 from nfc_app.auth import (
@@ -21,7 +23,7 @@ from nfc_app.auth import (
     safe_client_path,
     verify_password,
 )
-from nfc_app.database import init_db, sync_admin_account
+from nfc_app.database import commit_connection, connection_scope, get_connection, init_db, now_str, sync_admin_account
 from nfc_app.settings import settings
 from nfc_app.urls import build_public_tag_url
 from nfc_app.validators import is_public_http_url
@@ -68,6 +70,19 @@ def extract_csrf_token(html: str) -> str:
     return match.group(1)
 
 
+def asgi_get(app: FastAPI, path: str, *, client_host: str, headers: dict | None = None, follow_redirects: bool = True):
+    async def run():
+        transport = httpx.ASGITransport(app=app, client=(client_host, 50000))
+        async with httpx.AsyncClient(
+            transport=transport,
+            base_url="http://testserver",
+            follow_redirects=follow_redirects,
+        ) as client:
+            return await client.get(path, headers=headers)
+
+    return asyncio.run(run())
+
+
 class AuthTests(unittest.TestCase):
     def test_hash_password_roundtrip(self):
         password_hash = hash_password("Secret123")
@@ -98,8 +113,23 @@ class AuthTests(unittest.TestCase):
             headers={"x-forwarded-for": "100.100.100.100, 172.18.0.2"},
             client_host="172.18.0.2",
         )
-        with override_settings(trust_proxy_headers=True):
+        with override_settings(
+            trust_proxy_headers=True,
+            trusted_proxy_networks=("172.16.0.0/12",),
+        ):
             self.assertEqual(get_request_ip(request), "100.100.100.100")
+
+    def test_get_request_ip_ignores_forwarded_header_from_untrusted_peer(self):
+        request = DummyRequest(
+            "http://127.0.0.1:8001/",
+            headers={"x-forwarded-for": "100.100.100.100, 172.18.0.2"},
+            client_host="203.0.113.20",
+        )
+        with override_settings(
+            trust_proxy_headers=True,
+            trusted_proxy_networks=("172.16.0.0/12",),
+        ):
+            self.assertEqual(get_request_ip(request), "203.0.113.20")
 
     def test_is_admin_request_allowed_with_tailscale_only(self):
         tailscale_request = DummyRequest("http://127.0.0.1:8001/", client_host="100.100.100.100")
@@ -166,6 +196,32 @@ class DatabaseTests(unittest.TestCase):
 
         self.assertEqual(password_hash, second_hash)
 
+    def test_connection_scope_reuses_single_connection_and_commits_on_exit(self):
+        with TemporaryDirectory() as tmp_dir:
+            temp_db = Path(tmp_dir) / "test.db"
+            with test_runtime_settings(db_path=temp_db):
+                init_db()
+
+                with connection_scope():
+                    first_conn = get_connection()
+                    second_conn = get_connection()
+                    self.assertIs(first_conn, second_conn)
+
+                    first_conn.execute(
+                        """
+                        INSERT INTO clients (name, login, password_hash, is_active, created_at)
+                        VALUES (?, ?, ?, 1, ?)
+                        """,
+                        ("Scoped Client", "scoped-client", hash_password("ScopedPass123"), now_str()),
+                    )
+                    commit_connection(first_conn)
+
+                conn = sqlite3.connect(temp_db)
+                clients_count = conn.execute("SELECT COUNT(*) FROM clients WHERE login = 'scoped-client'").fetchone()[0]
+                conn.close()
+
+        self.assertEqual(clients_count, 1)
+
 
 class SecurityFlowTests(unittest.TestCase):
     def test_admin_login_requires_valid_csrf_and_logout_revokes_session(self):
@@ -216,22 +272,52 @@ class SecurityFlowTests(unittest.TestCase):
     def test_public_go_route_uses_forwarded_client_ip(self):
         with TemporaryDirectory() as tmp_dir:
             temp_db = Path(tmp_dir) / "test.db"
-            with test_runtime_settings(db_path=temp_db, trust_proxy_headers=True):
+            with test_runtime_settings(
+                db_path=temp_db,
+                trust_proxy_headers=True,
+                trusted_proxy_networks=("172.16.0.0/12",),
+            ):
                 init_db()
                 app = create_app()
-                with TestClient(app) as client:
-                    response = client.get(
-                        "/go/table1",
-                        headers={"x-forwarded-for": "203.0.113.10, 172.18.0.2"},
-                        follow_redirects=False,
-                    )
-                    self.assertEqual(response.status_code, 302)
+                response = asgi_get(
+                    app,
+                    "/go/table1",
+                    client_host="172.18.0.2",
+                    headers={"x-forwarded-for": "203.0.113.10, 172.18.0.2"},
+                    follow_redirects=False,
+                )
+                self.assertEqual(response.status_code, 302)
 
                 conn = sqlite3.connect(temp_db)
                 ip_address = conn.execute("SELECT ip_address FROM visits ORDER BY id DESC LIMIT 1").fetchone()[0]
                 conn.close()
 
         self.assertEqual(ip_address, "203.0.113.10")
+
+    def test_public_go_route_ignores_forwarded_ip_from_untrusted_proxy(self):
+        with TemporaryDirectory() as tmp_dir:
+            temp_db = Path(tmp_dir) / "test.db"
+            with test_runtime_settings(
+                db_path=temp_db,
+                trust_proxy_headers=True,
+                trusted_proxy_networks=("127.0.0.1/32",),
+            ):
+                init_db()
+                app = create_app()
+                response = asgi_get(
+                    app,
+                    "/go/table1",
+                    client_host="203.0.113.20",
+                    headers={"x-forwarded-for": "198.51.100.7, 172.18.0.2"},
+                    follow_redirects=False,
+                )
+                self.assertEqual(response.status_code, 302)
+
+                conn = sqlite3.connect(temp_db)
+                ip_address = conn.execute("SELECT ip_address FROM visits ORDER BY id DESC LIMIT 1").fetchone()[0]
+                conn.close()
+
+        self.assertEqual(ip_address, "203.0.113.20")
 
     def test_admin_login_is_rate_limited_after_repeated_failures(self):
         with TemporaryDirectory() as tmp_dir:
@@ -292,6 +378,51 @@ class SecurityFlowTests(unittest.TestCase):
 
         self.assertEqual(before_last_seen, after_last_seen)
 
+    def test_expired_admin_session_redirects_back_to_login(self):
+        with TemporaryDirectory() as tmp_dir:
+            temp_db = Path(tmp_dir) / "test.db"
+            with test_runtime_settings(db_path=temp_db):
+                init_db()
+                app = create_app()
+                with TestClient(app) as client:
+                    login_page = client.get("/admin/login")
+                    csrf_token = extract_csrf_token(login_page.text)
+                    login = client.post(
+                        "/admin/login",
+                        data={"login": "admin", "password": "AdminSecret123", "next": "/admin", "csrf_token": csrf_token},
+                        follow_redirects=False,
+                    )
+                    self.assertEqual(login.status_code, 303)
+
+                    conn = sqlite3.connect(temp_db)
+                    conn.execute("UPDATE sessions SET expires_at = '2000-01-01 00:00:00' WHERE scope = 'admin'")
+                    conn.commit()
+                    conn.close()
+
+                    expired_response = client.get("/admin", follow_redirects=False)
+                    self.assertEqual(expired_response.status_code, 303)
+                    self.assertIn("/admin/login?next=", expired_response.headers["location"])
+
+    def test_admin_login_sets_secure_cookie_in_production_mode(self):
+        with TemporaryDirectory() as tmp_dir:
+            temp_db = Path(tmp_dir) / "test.db"
+            with test_runtime_settings(db_path=temp_db, secure_cookies=True, app_env="production"):
+                init_db()
+                app = create_app()
+                with TestClient(app) as client:
+                    login_page = client.get("/admin/login")
+                    csrf_token = extract_csrf_token(login_page.text)
+                    login = client.post(
+                        "/admin/login",
+                        data={"login": "admin", "password": "AdminSecret123", "next": "/admin", "csrf_token": csrf_token},
+                        follow_redirects=False,
+                    )
+                    self.assertEqual(login.status_code, 303)
+                    set_cookie = login.headers.get("set-cookie", "")
+                    self.assertIn("Secure", set_cookie)
+                    self.assertIn("HttpOnly", set_cookie)
+                    self.assertIn("SameSite=lax", set_cookie)
+
 
 class AppFactoryTests(unittest.TestCase):
     def test_create_app_registers_main_routes(self):
@@ -305,6 +436,22 @@ class AppFactoryTests(unittest.TestCase):
         self.assertIn("/client", route_paths)
         self.assertIn("/client/tags/{tag_id}/update", route_paths)
         self.assertIn("/go/{tag_code}", route_paths)
+
+    def test_readyz_reports_pending_migrations_when_database_is_not_bootstrapped(self):
+        with TemporaryDirectory() as tmp_dir:
+            temp_db = Path(tmp_dir) / "pending.db"
+            with test_runtime_settings(db_path=temp_db):
+                app = create_app()
+                client = TestClient(app)
+                try:
+                    response = client.get("/readyz")
+                finally:
+                    client.close()
+
+        self.assertEqual(response.status_code, 503)
+        payload = response.json()
+        self.assertEqual(payload["status"], "not-ready")
+        self.assertIn("001_base_schema", payload["pending_migrations"])
 
 
 if __name__ == "__main__":

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from .common import rows_to_dicts
-from ..database import get_connection, now_str
+from ..database import close_connection, commit_connection, get_connection, now_str
 
 
 def list_clients_with_stats() -> list[dict]:
@@ -27,7 +27,7 @@ def list_clients_with_stats() -> list[dict]:
         """
     )
     rows = rows_to_dicts(cur.fetchall())
-    conn.close()
+    close_connection(conn)
     return rows
 
 
@@ -42,9 +42,9 @@ def create_client(name: str, login: str, password_hash: str) -> None:
             """,
             (name, login, password_hash, now_str()),
         )
-        conn.commit()
+        commit_connection(conn)
     finally:
-        conn.close()
+        close_connection(conn)
 
 
 def toggle_client_status(client_id: int) -> bool | None:
@@ -53,13 +53,13 @@ def toggle_client_status(client_id: int) -> bool | None:
     cur.execute("SELECT is_active FROM clients WHERE id = ?", (client_id,))
     row = cur.fetchone()
     if not row:
-        conn.close()
+        close_connection(conn)
         return None
 
     new_status = 0 if int(row["is_active"]) == 1 else 1
     cur.execute("UPDATE clients SET is_active = ? WHERE id = ?", (new_status, client_id))
-    conn.commit()
-    conn.close()
+    commit_connection(conn)
+    close_connection(conn)
     return bool(new_status)
 
 
@@ -68,7 +68,7 @@ def list_clients_for_assignment() -> list[dict]:
     cur = conn.cursor()
     cur.execute("SELECT id, name, login, is_active FROM clients ORDER BY name ASC, login ASC")
     rows = rows_to_dicts(cur.fetchall())
-    conn.close()
+    close_connection(conn)
     return rows
 
 
@@ -77,7 +77,7 @@ def get_client_identity(client_id: int) -> dict | None:
     cur = conn.cursor()
     cur.execute("SELECT id FROM clients WHERE id = ?", (client_id,))
     row = cur.fetchone()
-    conn.close()
+    close_connection(conn)
     return dict(row) if row else None
 
 
@@ -104,7 +104,7 @@ def list_tags_with_clients() -> list[dict]:
         """
     )
     rows = rows_to_dicts(cur.fetchall())
-    conn.close()
+    close_connection(conn)
     return rows
 
 
@@ -119,9 +119,9 @@ def create_tag(code: str, name: str, target_url: str, owner_id: int | None) -> N
             """,
             (code, name, target_url, now_str(), owner_id),
         )
-        conn.commit()
+        commit_connection(conn)
     finally:
-        conn.close()
+        close_connection(conn)
 
 
 def get_tag_identity(tag_id: int) -> dict | None:
@@ -129,7 +129,7 @@ def get_tag_identity(tag_id: int) -> dict | None:
     cur = conn.cursor()
     cur.execute("SELECT id, is_active FROM tags WHERE id = ?", (tag_id,))
     row = cur.fetchone()
-    conn.close()
+    close_connection(conn)
     return dict(row) if row else None
 
 
@@ -138,8 +138,8 @@ def assign_tag_owner(tag_id: int, owner_id: int | None) -> bool:
     cur = conn.cursor()
     cur.execute("UPDATE tags SET client_id = ? WHERE id = ?", (owner_id, tag_id))
     changed = cur.rowcount > 0
-    conn.commit()
-    conn.close()
+    commit_connection(conn)
+    close_connection(conn)
     return changed
 
 
@@ -149,13 +149,13 @@ def toggle_tag_status(tag_id: int) -> bool | None:
     cur.execute("SELECT is_active FROM tags WHERE id = ?", (tag_id,))
     row = cur.fetchone()
     if not row:
-        conn.close()
+        close_connection(conn)
         return None
 
     new_status = 0 if int(row["is_active"]) == 1 else 1
     cur.execute("UPDATE tags SET is_active = ? WHERE id = ?", (new_status, tag_id))
-    conn.commit()
-    conn.close()
+    commit_connection(conn)
+    close_connection(conn)
     return bool(new_status)
 
 
@@ -164,8 +164,8 @@ def delete_tag(tag_id: int) -> bool:
     cur = conn.cursor()
     cur.execute("DELETE FROM tags WHERE id = ?", (tag_id,))
     changed = cur.rowcount > 0
-    conn.commit()
-    conn.close()
+    commit_connection(conn)
+    close_connection(conn)
     return changed
 
 
@@ -174,7 +174,7 @@ def list_tag_codes() -> list[str]:
     cur = conn.cursor()
     cur.execute("SELECT code FROM tags ORDER BY code ASC")
     codes = [row["code"] for row in cur.fetchall()]
-    conn.close()
+    close_connection(conn)
     return codes
 
 
@@ -225,7 +225,7 @@ def list_visits(tag: str, limit: int) -> list[dict]:
             (limit,),
         )
     rows = rows_to_dicts(cur.fetchall())
-    conn.close()
+    close_connection(conn)
     return rows
 
 
@@ -251,5 +251,5 @@ def list_visits_for_export() -> list[dict]:
         """
     )
     rows = rows_to_dicts(cur.fetchall())
-    conn.close()
+    close_connection(conn)
     return rows
