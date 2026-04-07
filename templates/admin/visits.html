@@ -4,6 +4,12 @@
 
 {% block content %}
     {% call page_header("Журнал переходов", "Подробный список всех открытий NFC-ссылок.") %}
+        <a
+            class="btn btn-secondary"
+            href="/admin/export.csv?tag={{ selected_tag }}&client_login={{ selected_client_login }}&limit={{ limit }}"
+        >
+            Экспорт CSV
+        </a>
         {{ logout_form("/admin/logout", csrf_token) }}
     {% endcall %}
 
@@ -15,6 +21,7 @@
                     <option value="{{ code }}" {% if code == selected_tag %}selected{% endif %}>{{ code }}</option>
                 {% endfor %}
             </select>
+            <input name="client_login" value="{{ selected_client_login }}" placeholder="client_login">
             <input name="limit" type="number" value="{{ limit }}" min="1" max="500">
             <button type="submit" class="btn">Показать</button>
             <a class="btn btn-secondary" href="/admin/visits">Сбросить</a>

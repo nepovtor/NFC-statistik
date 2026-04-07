@@ -236,7 +236,7 @@ def client_visits(request: Request, tag: str = Query(""), limit: int = Query(100
 
 
 @router.get("/client/export.csv")
-def client_export_csv(request: Request):
+def client_export_csv(request: Request, tag: str = Query(""), limit: int = Query(1000)):
     auth_redirect = require_client(request)
     if auth_redirect:
         return auth_redirect
@@ -245,7 +245,7 @@ def client_export_csv(request: Request):
     if not client:
         return RedirectResponse(url="/client/login", status_code=303)
 
-    rows = get_client_export_rows(client["id"])
+    rows = get_client_export_rows(client["id"], tag, limit)
     return csv_response(
         f"client_{client['login']}_visits.csv",
         [

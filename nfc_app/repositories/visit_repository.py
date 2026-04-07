@@ -4,6 +4,24 @@ from .common import rows_to_dicts
 from ..database import close_connection, commit_connection, get_connection
 
 
+def _build_admin_visit_filters(tag: str, client_login: str) -> tuple[str, list[str]]:
+    conditions: list[str] = []
+    params: list[str] = []
+
+    if tag:
+        conditions.append("v.tag_code = ?")
+        params.append(tag)
+
+    if client_login:
+        conditions.append("c.login = ?")
+        params.append(client_login)
+
+    where_sql = ""
+    if conditions:
+        where_sql = "WHERE " + " AND ".join(conditions)
+    return where_sql, params
+
+
 def record_visit(
     tag_code: str,
     target_url: str,
@@ -43,62 +61,12 @@ def list_client_visit_tag_codes(client_id: int) -> list[str]:
     return codes
 
 
-def list_admin_visits(tag: str, limit: int) -> list[dict]:
+def list_admin_visits(tag: str, client_login: str, limit: int) -> list[dict]:
     conn = get_connection()
     cur = conn.cursor()
-    if tag:
-        cur.execute(
-            """
-            SELECT
-                v.id,
-                v.tag_code,
-                v.target_url,
-                v.visited_at,
-                v.ip_address,
-                v.user_agent,
-                v.referer,
-                c.name AS client_name,
-                c.login AS client_login
-            FROM visits v
-            LEFT JOIN tags t ON t.code = v.tag_code
-            LEFT JOIN clients c ON c.id = t.client_id
-            WHERE v.tag_code = ?
-            ORDER BY v.id DESC
-            LIMIT ?
-            """,
-            (tag, limit),
-        )
-    else:
-        cur.execute(
-            """
-            SELECT
-                v.id,
-                v.tag_code,
-                v.target_url,
-                v.visited_at,
-                v.ip_address,
-                v.user_agent,
-                v.referer,
-                c.name AS client_name,
-                c.login AS client_login
-            FROM visits v
-            LEFT JOIN tags t ON t.code = v.tag_code
-            LEFT JOIN clients c ON c.id = t.client_id
-            ORDER BY v.id DESC
-            LIMIT ?
-            """,
-            (limit,),
-        )
-    rows = rows_to_dicts(cur.fetchall())
-    close_connection(conn)
-    return rows
-
-
-def list_admin_visits_for_export() -> list[dict]:
-    conn = get_connection()
-    cur = conn.cursor()
+    where_sql, params = _build_admin_visit_filters(tag, client_login)
     cur.execute(
-        """
+        f"""
         SELECT
             v.id,
             v.tag_code,
@@ -112,8 +80,41 @@ def list_admin_visits_for_export() -> list[dict]:
         FROM visits v
         LEFT JOIN tags t ON t.code = v.tag_code
         LEFT JOIN clients c ON c.id = t.client_id
+        {where_sql}
         ORDER BY v.id DESC
-        """
+        LIMIT ?
+        """,
+        [*params, limit],
+    )
+    rows = rows_to_dicts(cur.fetchall())
+    close_connection(conn)
+    return rows
+
+
+def list_admin_visits_for_export(tag: str, client_login: str, limit: int) -> list[dict]:
+    conn = get_connection()
+    cur = conn.cursor()
+    where_sql, params = _build_admin_visit_filters(tag, client_login)
+    cur.execute(
+        f"""
+        SELECT
+            v.id,
+            v.tag_code,
+            v.target_url,
+            v.visited_at,
+            v.ip_address,
+            v.user_agent,
+            v.referer,
+            c.name AS client_name,
+            c.login AS client_login
+        FROM visits v
+        LEFT JOIN tags t ON t.code = v.tag_code
+        LEFT JOIN clients c ON c.id = t.client_id
+        {where_sql}
+        ORDER BY v.id DESC
+        LIMIT ?
+        """,
+        [*params, limit],
     )
     rows = rows_to_dicts(cur.fetchall())
     close_connection(conn)
@@ -166,11 +167,16 @@ def list_client_visits(client_id: int, tag: str, limit: int) -> list[dict]:
     return rows
 
 
-def list_client_visits_for_export(client_id: int) -> list[dict]:
+def list_client_visits_for_export(client_id: int, tag: str, limit: int) -> list[dict]:
     conn = get_connection()
     cur = conn.cursor()
+    params: list[object] = [client_id]
+    where_sql = "WHERE t.client_id = ?"
+    if tag:
+        where_sql += " AND v.tag_code = ?"
+        params.append(tag)
     cur.execute(
-        """
+        f"""
         SELECT
             v.id,
             v.tag_code,
@@ -181,10 +187,11 @@ def list_client_visits_for_export(client_id: int) -> list[dict]:
             v.referer
         FROM visits v
         JOIN tags t ON t.code = v.tag_code
-        WHERE t.client_id = ?
+        {where_sql}
         ORDER BY v.id DESC
+        LIMIT ?
         """,
-        (client_id,),
+        [*params, limit],
     )
     rows = rows_to_dicts(cur.fetchall())
     close_connection(conn)

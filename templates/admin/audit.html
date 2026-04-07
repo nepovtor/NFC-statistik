@@ -4,11 +4,27 @@
 
 {% block content %}
     {% call page_header("Аудит действий", "Последние административные события и изменения в системе.") %}
+        <a
+            class="btn btn-secondary"
+            href="/admin/audit.csv?action={{ selected_action }}&admin_login={{ selected_admin_login }}&limit={{ limit }}"
+        >
+            Экспорт CSV
+        </a>
         {{ logout_form("/admin/logout", csrf_token) }}
     {% endcall %}
 
+    {% call panel("Фильтр") %}
+        <form method="get" action="/admin/audit" class="toolbar">
+            <input name="action" value="{{ selected_action }}" placeholder="action">
+            <input name="admin_login" value="{{ selected_admin_login }}" placeholder="admin_login">
+            <input name="limit" type="number" value="{{ limit }}" min="1" max="500">
+            <button type="submit" class="btn">Показать</button>
+            <a class="btn btn-secondary" href="/admin/audit">Сбросить</a>
+        </form>
+    {% endcall %}
+
     {% call panel("Последние события") %}
-        <div class="small muted">Показываем последние {{ limit }} записей.</div>
+        <div class="small muted">Показываем страницу {{ page }} из {{ total_pages }}. Всего записей: {{ total }}.</div>
         <div class="spacer-sm"></div>
         {% call data_table(["ID", "Дата и время", "Админ", "Действие", "Цель", "IP", "Детали"]) %}
             {% if events %}
@@ -27,5 +43,24 @@
                 {{ empty_row(7, "Пока аудиторских записей нет.") }}
             {% endif %}
         {% endcall %}
+        <div class="spacer-sm"></div>
+        <div class="toolbar">
+            {% if has_prev %}
+                <a
+                    class="btn btn-secondary"
+                    href="/admin/audit?action={{ selected_action }}&admin_login={{ selected_admin_login }}&limit={{ limit }}&page={{ page - 1 }}"
+                >
+                    Предыдущая
+                </a>
+            {% endif %}
+            {% if has_next %}
+                <a
+                    class="btn btn-secondary"
+                    href="/admin/audit?action={{ selected_action }}&admin_login={{ selected_admin_login }}&limit={{ limit }}&page={{ page + 1 }}"
+                >
+                    Следующая
+                </a>
+            {% endif %}
+        </div>
     {% endcall %}
 {% endblock %}

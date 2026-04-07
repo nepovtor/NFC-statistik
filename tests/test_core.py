@@ -8,6 +8,7 @@ import unittest
 from contextlib import contextmanager
 from pathlib import Path
 from tempfile import TemporaryDirectory
+import time
 import re
 from unittest.mock import patch
 
@@ -108,6 +109,26 @@ def asgi_get_many(
             return await asyncio.gather(*[client.get(path, headers=headers) for _ in range(count)])
 
     return asyncio.run(run())
+
+
+def login_admin(client: TestClient, password: str = "AdminSecret123", next_path: str = "/admin"):
+    login_page = client.get("/admin/login")
+    csrf_token = extract_csrf_token(login_page.text)
+    return client.post(
+        "/admin/login",
+        data={"login": "admin", "password": password, "next": next_path, "csrf_token": csrf_token},
+        follow_redirects=False,
+    )
+
+
+def login_client(client: TestClient, login_value: str, password: str, next_path: str = "/client"):
+    login_page = client.get("/client/login")
+    csrf_token = extract_csrf_token(login_page.text)
+    return client.post(
+        "/client/login",
+        data={"login": login_value, "password": password, "next": next_path, "csrf_token": csrf_token},
+        follow_redirects=False,
+    )
 
 
 class AuthTests(unittest.TestCase):
@@ -600,6 +621,191 @@ class SecurityFlowTests(unittest.TestCase):
         self.assertIn("client.created", audit_page.text)
         self.assertIn("audit-client", audit_page.text)
 
+    def test_admin_audit_supports_filters_pagination_and_csv_export(self):
+        with TemporaryDirectory() as tmp_dir:
+            temp_db = Path(tmp_dir) / "test.db"
+            with test_runtime_settings(db_path=temp_db):
+                init_db()
+                app = create_app()
+                with TestClient(app) as client:
+                    login = login_admin(client)
+                    self.assertEqual(login.status_code, 303)
+
+                    clients_page = client.get("/admin/clients")
+                    clients_csrf = extract_csrf_token(clients_page.text)
+
+                    first_client = client.post(
+                        "/admin/clients/create",
+                        data={
+                            "name": "Audit One",
+                            "login": "audit-one",
+                            "password": "AuditPass123",
+                            "csrf_token": clients_csrf,
+                        },
+                        follow_redirects=False,
+                    )
+                    self.assertEqual(first_client.status_code, 303)
+
+                    second_client = client.post(
+                        "/admin/clients/create",
+                        data={
+                            "name": "Audit Two",
+                            "login": "audit-two",
+                            "password": "AuditPass123",
+                            "csrf_token": clients_csrf,
+                        },
+                        follow_redirects=False,
+                    )
+                    self.assertEqual(second_client.status_code, 303)
+
+                    audit_page_1 = client.get("/admin/audit?action=client.created&admin_login=admin&limit=1&page=1")
+                    audit_page_2 = client.get("/admin/audit?action=client.created&admin_login=admin&limit=1&page=2")
+                    audit_export = client.get("/admin/audit.csv?action=client.created&admin_login=admin&limit=10")
+
+        self.assertEqual(audit_page_1.status_code, 200)
+        self.assertEqual(audit_page_2.status_code, 200)
+        self.assertEqual(audit_export.status_code, 200)
+        self.assertIn("Показываем страницу 1 из 2", audit_page_1.text)
+        self.assertIn("Показываем страницу 2 из 2", audit_page_2.text)
+        self.assertIn("audit-two", audit_page_1.text)
+        self.assertNotIn("audit-one", audit_page_1.text)
+        self.assertIn("audit-one", audit_page_2.text)
+        self.assertNotIn("admin.login", audit_export.text)
+        self.assertIn("client.created", audit_export.text)
+        self.assertIn("audit-one", audit_export.text)
+        self.assertIn("audit-two", audit_export.text)
+
+    def test_admin_visits_and_export_support_tag_and_client_filters(self):
+        with TemporaryDirectory() as tmp_dir:
+            temp_db = Path(tmp_dir) / "test.db"
+            with test_runtime_settings(db_path=temp_db):
+                init_db()
+
+                conn = sqlite3.connect(temp_db)
+                alice_id = conn.execute(
+                    """
+                    INSERT INTO clients (name, login, password_hash, is_active, created_at)
+                    VALUES (?, ?, ?, 1, ?)
+                    """,
+                    ("Alice", "alice", hash_password("AlicePass123"), now_str()),
+                ).lastrowid
+                bob_id = conn.execute(
+                    """
+                    INSERT INTO clients (name, login, password_hash, is_active, created_at)
+                    VALUES (?, ?, ?, 1, ?)
+                    """,
+                    ("Bob", "bob", hash_password("BobPass123"), now_str()),
+                ).lastrowid
+                conn.execute(
+                    """
+                    INSERT INTO tags (code, name, target_url, is_active, created_at, client_id)
+                    VALUES (?, ?, ?, 1, ?, ?)
+                    """,
+                    ("alice-tag", "Alice Tag", "https://example.com/alice-tag", now_str(), alice_id),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO tags (code, name, target_url, is_active, created_at, client_id)
+                    VALUES (?, ?, ?, 1, ?, ?)
+                    """,
+                    ("bob-tag", "Bob Tag", "https://example.com/bob-tag", now_str(), bob_id),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO visits (tag_code, target_url, visited_at, ip_address, user_agent, referer)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    ("alice-tag", "https://example.com/export-alice", now_str(), "203.0.113.10", "AliceAgent", ""),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO visits (tag_code, target_url, visited_at, ip_address, user_agent, referer)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    ("bob-tag", "https://example.com/export-bob", now_str(), "203.0.113.11", "BobAgent", ""),
+                )
+                conn.commit()
+                conn.close()
+
+                app = create_app()
+                with TestClient(app) as client:
+                    login = login_admin(client)
+                    self.assertEqual(login.status_code, 303)
+
+                    visits_page = client.get("/admin/visits?tag=alice-tag&client_login=alice&limit=10")
+                    export = client.get("/admin/export.csv?tag=alice-tag&client_login=alice&limit=10")
+
+        self.assertEqual(visits_page.status_code, 200)
+        self.assertEqual(export.status_code, 200)
+        self.assertIn("https://example.com/export-alice", visits_page.text)
+        self.assertNotIn("https://example.com/export-bob", visits_page.text)
+        self.assertIn("alice-tag", export.text)
+        self.assertIn("export-alice", export.text)
+        self.assertNotIn("bob-tag", export.text)
+        self.assertNotIn("export-bob", export.text)
+
+    def test_client_visits_and_export_support_tag_filters(self):
+        with TemporaryDirectory() as tmp_dir:
+            temp_db = Path(tmp_dir) / "test.db"
+            with test_runtime_settings(db_path=temp_db):
+                init_db()
+
+                conn = sqlite3.connect(temp_db)
+                alice_id = conn.execute(
+                    """
+                    INSERT INTO clients (name, login, password_hash, is_active, created_at)
+                    VALUES (?, ?, ?, 1, ?)
+                    """,
+                    ("Alice", "alice", hash_password("AlicePass123"), now_str()),
+                ).lastrowid
+                conn.execute(
+                    """
+                    INSERT INTO tags (code, name, target_url, is_active, created_at, client_id)
+                    VALUES (?, ?, ?, 1, ?, ?)
+                    """,
+                    ("alice-a", "Alice A", "https://example.com/alice-a", now_str(), alice_id),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO tags (code, name, target_url, is_active, created_at, client_id)
+                    VALUES (?, ?, ?, 1, ?, ?)
+                    """,
+                    ("alice-b", "Alice B", "https://example.com/alice-b", now_str(), alice_id),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO visits (tag_code, target_url, visited_at, ip_address, user_agent, referer)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    ("alice-a", "https://example.com/visit-a", now_str(), "203.0.113.10", "AgentA", ""),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO visits (tag_code, target_url, visited_at, ip_address, user_agent, referer)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    ("alice-b", "https://example.com/visit-b", now_str(), "203.0.113.11", "AgentB", ""),
+                )
+                conn.commit()
+                conn.close()
+
+                app = create_app()
+                with TestClient(app) as client:
+                    login = login_client(client, "alice", "AlicePass123")
+                    self.assertEqual(login.status_code, 303)
+
+                    visits_page = client.get("/client/visits?tag=alice-a&limit=10")
+                    export = client.get("/client/export.csv?tag=alice-a&limit=10")
+
+        self.assertEqual(visits_page.status_code, 200)
+        self.assertEqual(export.status_code, 200)
+        self.assertIn("https://example.com/visit-a", visits_page.text)
+        self.assertNotIn("https://example.com/visit-b", visits_page.text)
+        self.assertIn("alice-a", export.text)
+        self.assertIn("visit-a", export.text)
+        self.assertNotIn("alice-b", export.text)
+        self.assertNotIn("visit-b", export.text)
+
     def test_session_read_does_not_touch_row_on_every_request(self):
         with TemporaryDirectory() as tmp_dir:
             temp_db = Path(tmp_dir) / "test.db"
@@ -687,6 +893,7 @@ class AppFactoryTests(unittest.TestCase):
         self.assertIn("/readyz", route_paths)
         self.assertIn("/admin", route_paths)
         self.assertIn("/admin/audit", route_paths)
+        self.assertIn("/admin/audit.csv", route_paths)
         self.assertIn("/client", route_paths)
         self.assertIn("/client/tags/{tag_id}/update", route_paths)
         self.assertIn("/go/{tag_code}", route_paths)
@@ -753,6 +960,71 @@ class DeploymentConfigTests(unittest.TestCase):
             self.assertIn('command: ["python", "-m", "nfc_app", "serve"]', text)
             self.assertIn("service_completed_successfully", text)
             self.assertIn("/readyz", text)
+
+
+class PerformanceSmokeTests(unittest.TestCase):
+    def test_public_redirect_hot_path_stays_within_smoke_budget(self):
+        with TemporaryDirectory() as tmp_dir:
+            temp_db = Path(tmp_dir) / "test.db"
+            with test_runtime_settings(db_path=temp_db):
+                init_db()
+                app = create_app()
+                with TestClient(app) as client:
+                    started_at = time.perf_counter()
+                    for _ in range(20):
+                        response = client.get("/go/table1", follow_redirects=False)
+                        self.assertEqual(response.status_code, 302)
+                    elapsed = time.perf_counter() - started_at
+
+        self.assertLess(elapsed, 5.0)
+
+    def test_admin_dashboard_hot_path_stays_within_smoke_budget(self):
+        with TemporaryDirectory() as tmp_dir:
+            temp_db = Path(tmp_dir) / "test.db"
+            with test_runtime_settings(db_path=temp_db):
+                init_db()
+                app = create_app()
+                with TestClient(app) as client:
+                    login = login_admin(client)
+                    self.assertEqual(login.status_code, 303)
+
+                    started_at = time.perf_counter()
+                    for _ in range(12):
+                        response = client.get("/admin")
+                        self.assertEqual(response.status_code, 200)
+                    elapsed = time.perf_counter() - started_at
+
+        self.assertLess(elapsed, 5.0)
+
+    def test_client_dashboard_hot_path_stays_within_smoke_budget(self):
+        with TemporaryDirectory() as tmp_dir:
+            temp_db = Path(tmp_dir) / "test.db"
+            with test_runtime_settings(db_path=temp_db):
+                init_db()
+
+                conn = sqlite3.connect(temp_db)
+                conn.execute(
+                    """
+                    INSERT INTO clients (name, login, password_hash, is_active, created_at)
+                    VALUES (?, ?, ?, 1, ?)
+                    """,
+                    ("Alice", "alice", hash_password("AlicePass123"), now_str()),
+                )
+                conn.commit()
+                conn.close()
+
+                app = create_app()
+                with TestClient(app) as client:
+                    login = login_client(client, "alice", "AlicePass123")
+                    self.assertEqual(login.status_code, 303)
+
+                    started_at = time.perf_counter()
+                    for _ in range(12):
+                        response = client.get("/client")
+                        self.assertEqual(response.status_code, 200)
+                    elapsed = time.perf_counter() - started_at
+
+        self.assertLess(elapsed, 5.0)
 
 
 if __name__ == "__main__":

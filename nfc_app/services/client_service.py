@@ -34,13 +34,16 @@ def update_client_tag_record(client_id: int, tag_id: int, name: str, target_url:
 
 def get_client_visits_page_data(client_id: int, tag: str, limit: int) -> dict:
     bounded_limit = max(1, min(limit, 500))
+    normalized_tag = (tag or "").strip()
     return {
         "tag_options": list_client_visit_tag_codes(client_id),
-        "selected_tag": tag,
+        "selected_tag": normalized_tag,
         "limit": bounded_limit,
-        "visits": sanitize_visit_rows(list_client_visits(client_id, tag, bounded_limit)),
+        "visits": sanitize_visit_rows(list_client_visits(client_id, normalized_tag, bounded_limit)),
     }
 
 
-def get_client_export_rows(client_id: int) -> list[dict]:
-    return sanitize_visit_rows(list_client_visits_for_export(client_id))
+def get_client_export_rows(client_id: int, tag: str, limit: int) -> list[dict]:
+    bounded_limit = max(1, min(limit, 5000))
+    normalized_tag = (tag or "").strip()
+    return sanitize_visit_rows(list_client_visits_for_export(client_id, normalized_tag, bounded_limit))
