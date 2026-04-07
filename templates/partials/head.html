@@ -23,4 +23,4 @@
         root.dataset.theme = fallbackTheme;
     })();
 </script>
-<link rel="stylesheet" href="{{ request.url_for('static', path='styles.css') }}">
+<link rel="stylesheet" href="{{ request.url_for('static', path='styles.css') }}?v={{ request.app.version }}">
