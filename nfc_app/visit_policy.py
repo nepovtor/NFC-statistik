@@ -51,6 +51,32 @@ def _mask_referer(referer: str) -> str:
     return urlunsplit((parsed.scheme, parsed.netloc, parsed.path, "", ""))
 
 
+def prepare_visit_storage_payload(
+    *,
+    tag_code: str,
+    target_url: str,
+    visited_at: str,
+    ip_address: str,
+    user_agent: str,
+    referer: str,
+) -> dict:
+    visit_row = {
+        "tag_code": tag_code.strip(),
+        "target_url": target_url.strip(),
+        "visited_at": visited_at.strip(),
+        "ip_address": ip_address.strip(),
+        "user_agent": user_agent.strip(),
+        "referer": referer.strip(),
+    }
+    if settings.visit_storage_mode != "minimized":
+        return visit_row
+
+    visit_row["ip_address"] = _mask_ip_address(visit_row["ip_address"])
+    visit_row["user_agent"] = _mask_user_agent(visit_row["user_agent"])
+    visit_row["referer"] = _mask_referer(visit_row["referer"])
+    return visit_row
+
+
 def sanitize_visit_row(row: Mapping) -> dict:
     visit_row = dict(row)
     if settings.visit_data_exposure == "full":

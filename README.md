@@ -171,6 +171,7 @@ TRUSTED_PROXY_NETWORKS=127.0.0.1/32,::1/128
 SESSION_TOUCH_INTERVAL_MINUTES=5
 LOGIN_RATE_LIMIT_ATTEMPTS=5
 LOGIN_RATE_LIMIT_WINDOW_MINUTES=15
+VISIT_STORAGE_MODE=full
 VISIT_DATA_EXPOSURE=full
 VISIT_RETENTION_DAYS=180
 ```
@@ -353,6 +354,7 @@ docker compose -f compose.production.yaml --env-file .env.production up -d --bui
 - `SESSION_TOUCH_INTERVAL_MINUTES`
 - `LOGIN_RATE_LIMIT_ATTEMPTS`
 - `LOGIN_RATE_LIMIT_WINDOW_MINUTES`
+- `VISIT_STORAGE_MODE`
 - `VISIT_DATA_EXPOSURE`
 - `VISIT_RETENTION_DAYS`
 - `ADMIN_ALLOWED_NETWORKS`
@@ -379,8 +381,9 @@ python3 -m nfc_app prune-data
 
 Сейчас в проекте есть явная privacy-policy для аналитики:
 
-- raw-данные визитов хранятся в БД как есть
-- UI и CSV-экспорты работают через `VISIT_DATA_EXPOSURE`
+- режим хранения задаётся через `VISIT_STORAGE_MODE`
+- в режиме `full` визит сохраняется как есть, а в режиме `minimized` IP режется до подсети, `user-agent` скрывается, а `referer` очищается от query string уже в момент записи
+- UI и CSV-экспорты дополнительно работают через `VISIT_DATA_EXPOSURE`
 - `/admin/visits` и `/admin/export.csv` поддерживают фильтры `tag`, `client_login`, `limit`
 - `/client/visits` и `/client/export.csv` поддерживают фильтры `tag`, `limit`
 - в режиме `masked` IP маскируется до подсети, `user-agent` скрывается, а `referer` очищается от query string
@@ -458,7 +461,8 @@ python3 -m unittest discover -s tests -v
 - включай `TRUST_PROXY_HEADERS=1` только за реальным reverse proxy и вместе с корректным `TRUSTED_PROXY_NETWORKS`
 - при желании увеличь `SESSION_TOUCH_INTERVAL_MINUTES`, если хочешь ещё меньше write-нагрузку от сессий
 - если нужно, настрой `LOGIN_RATE_LIMIT_ATTEMPTS` и `LOGIN_RATE_LIMIT_WINDOW_MINUTES`
-- для production разумный дефолт: `VISIT_DATA_EXPOSURE=masked`
+- если нужна data minimization уже на уровне БД, включи `VISIT_STORAGE_MODE=minimized`
+- для production разумный дефолт: `VISIT_STORAGE_MODE=minimized` и `VISIT_DATA_EXPOSURE=masked`
 - периодически запускай `python3 -m nfc_app prune-data`, если используешь `VISIT_RETENTION_DAYS`
 - делай резервную копию `data/nfc_stats.db`
 - не используй локальный Tailscale-режим для клиентов без Tailscale

@@ -62,6 +62,26 @@ body {
     color: var(--text);
 }
 
+@keyframes surface-enter {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes toast-pulse {
+    0% {
+        box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.28);
+    }
+    100% {
+        box-shadow: 0 0 0 12px rgba(34, 197, 94, 0);
+    }
+}
+
 body.client-mode {
     --bg-top: #071716;
     --bg-bottom: #0d1e1a;
@@ -248,6 +268,49 @@ a {
     border: 1px solid rgba(56, 189, 248, 0.16);
     border-radius: 14px;
     color: var(--text);
+    animation: surface-enter 0.42s ease both;
+}
+
+.topbar,
+.card,
+.panel,
+.table-shell {
+    animation: surface-enter 0.48s ease both;
+}
+
+.cards > *:nth-child(1),
+.grid-2 > *:nth-child(1),
+.client-soft-grid > *:nth-child(1),
+.tag-grid > *:nth-child(1) {
+    animation-delay: 0.04s;
+}
+
+.cards > *:nth-child(2),
+.grid-2 > *:nth-child(2),
+.client-soft-grid > *:nth-child(2),
+.tag-grid > *:nth-child(2) {
+    animation-delay: 0.08s;
+}
+
+.cards > *:nth-child(3),
+.client-soft-grid > *:nth-child(3),
+.tag-grid > *:nth-child(3) {
+    animation-delay: 0.12s;
+}
+
+.cards > *:nth-child(4),
+.tag-grid > *:nth-child(4) {
+    animation-delay: 0.16s;
+}
+
+.flash.is-success {
+    border-color: rgba(34, 197, 94, 0.26);
+    background: rgba(34, 197, 94, 0.1);
+}
+
+.flash.is-error {
+    border-color: rgba(249, 115, 22, 0.24);
+    background: rgba(249, 115, 22, 0.08);
 }
 
 .topbar {
@@ -932,13 +995,44 @@ button:hover,
     transition: background-color 0.18s ease;
 }
 
-.responsive-table tbody tr:hover {
-    background: rgba(56, 189, 248, 0.04);
+.responsive-table tbody tr td {
+    transition: background-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.responsive-table tbody tr:hover td,
+.responsive-table tbody tr:focus-within td {
+    background: rgba(56, 189, 248, 0.06);
+    box-shadow: inset 0 1px 0 rgba(56, 189, 248, 0.08), inset 0 -1px 0 rgba(56, 189, 248, 0.08);
+}
+
+.responsive-table tbody tr.row-state-ok:hover td,
+.responsive-table tbody tr.row-state-ok:focus-within td {
+    background: rgba(34, 197, 94, 0.06);
+}
+
+.responsive-table tbody tr.row-state-off:hover td,
+.responsive-table tbody tr.row-state-off:focus-within td {
+    background: rgba(249, 115, 22, 0.08);
+}
+
+.responsive-table tbody tr.row-state-accent:hover td,
+.responsive-table tbody tr.row-state-accent:focus-within td {
+    background: rgba(56, 189, 248, 0.08);
 }
 
 .responsive-table tbody tr[data-empty-row]:hover,
-.responsive-table tbody tr[data-table-empty]:hover {
+.responsive-table tbody tr[data-table-empty]:hover,
+.responsive-table tbody tr[data-empty-row]:focus-within,
+.responsive-table tbody tr[data-table-empty]:focus-within {
     background: transparent;
+}
+
+.responsive-table tbody tr[data-empty-row]:hover td,
+.responsive-table tbody tr[data-table-empty]:hover td,
+.responsive-table tbody tr[data-empty-row]:focus-within td,
+.responsive-table tbody tr[data-table-empty]:focus-within td {
+    background: transparent;
+    box-shadow: none;
 }
 
 .row-state-ok td:first-child,
@@ -1069,6 +1163,7 @@ button:hover,
 .ui-toast.is-visible {
     opacity: 1;
     transform: translateY(0);
+    animation: toast-pulse 0.6s ease;
 }
 
 .ui-toast.is-error {
@@ -1091,6 +1186,23 @@ button:hover,
     .grid-2,
     .forms-grid {
         grid-template-columns: 1fr;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .topbar,
+    .flash,
+    .card,
+    .panel,
+    .table-shell,
+    .ui-toast {
+        animation: none;
+    }
+
+    .responsive-table tbody tr,
+    .responsive-table tbody tr td,
+    .ui-toast {
+        transition: none;
     }
 }
 

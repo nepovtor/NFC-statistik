@@ -10,7 +10,7 @@
 
         <main class="main">
             {% if message %}
-                <div class="flash">{{ message }}</div>
+                <div class="flash" data-ui-flash role="status">{{ message }}</div>
             {% endif %}
             {% block content %}{% endblock %}
         </main>

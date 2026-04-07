@@ -87,6 +87,60 @@
             }, 2200);
         }
 
+        function inferFlashTone(message) {
+            var value = (message || "").trim().toLowerCase();
+            if (!value) {
+                return "info";
+            }
+
+            if (
+                value.indexOf("неверный") !== -1 ||
+                value.indexOf("ошиб") !== -1 ||
+                value.indexOf("истек") !== -1 ||
+                value.indexOf("устар") !== -1 ||
+                value.indexOf("не найден") !== -1 ||
+                value.indexOf("слишком много") !== -1 ||
+                value.indexOf("не удалось") !== -1 ||
+                value.indexOf("некоррект") !== -1
+            ) {
+                return "error";
+            }
+
+            if (
+                value.indexOf("сохран") !== -1 ||
+                value.indexOf("создан") !== -1 ||
+                value.indexOf("удален") !== -1 ||
+                value.indexOf("удалена") !== -1 ||
+                value.indexOf("вышли") !== -1 ||
+                value.indexOf("обнов") !== -1 ||
+                value.indexOf("изменени") !== -1 ||
+                value.indexOf("назнач") !== -1 ||
+                value.indexOf("отвязана") !== -1
+            ) {
+                return "success";
+            }
+
+            return "info";
+        }
+
+        function enhanceFlashMessage() {
+            var flash = document.querySelector("[data-ui-flash]");
+            if (!flash) {
+                return;
+            }
+
+            var message = flash.textContent.trim();
+            if (!message) {
+                return;
+            }
+
+            var tone = inferFlashTone(message);
+            flash.classList.add("is-" + tone);
+            if (tone === "success") {
+                showToast(message, false);
+            }
+        }
+
         function resetCopyButton(button) {
             var defaultLabel = button.getAttribute("data-copy-label") || "Копировать";
             button.textContent = defaultLabel;
@@ -235,6 +289,7 @@
             }
 
             initTableWidgets();
+            enhanceFlashMessage();
 
             document.addEventListener("click", function (event) {
                 var copyButton = event.target.closest("[data-copy-value]");

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from .common import rows_to_dicts
 from ..database import close_connection, commit_connection, get_connection
+from ..visit_policy import prepare_visit_storage_payload
 
 
 def _build_admin_visit_filters(tag: str, client_login: str) -> tuple[str, list[str]]:
@@ -30,6 +31,14 @@ def record_visit(
     user_agent: str,
     referer: str,
 ) -> None:
+    visit_payload = prepare_visit_storage_payload(
+        tag_code=tag_code,
+        target_url=target_url,
+        visited_at=visited_at,
+        ip_address=ip_address,
+        user_agent=user_agent,
+        referer=referer,
+    )
     conn = get_connection()
     cur = conn.cursor()
     cur.execute(
@@ -37,7 +46,14 @@ def record_visit(
         INSERT INTO visits (tag_code, target_url, visited_at, ip_address, user_agent, referer)
         VALUES (?, ?, ?, ?, ?, ?)
         """,
-        (tag_code, target_url, visited_at, ip_address, user_agent, referer),
+        (
+            visit_payload["tag_code"],
+            visit_payload["target_url"],
+            visit_payload["visited_at"],
+            visit_payload["ip_address"],
+            visit_payload["user_agent"],
+            visit_payload["referer"],
+        ),
     )
     commit_connection(conn)
     close_connection(conn)

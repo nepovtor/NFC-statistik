@@ -63,6 +63,7 @@ def test_runtime_settings(**updates):
         "session_touch_interval_minutes": 5,
         "login_rate_limit_attempts": 5,
         "login_rate_limit_window_minutes": 15,
+        "visit_storage_mode": "full",
         "visit_data_exposure": "full",
         "visit_retention_days": 180,
     }
@@ -400,6 +401,40 @@ class SecurityFlowTests(unittest.TestCase):
                 conn.close()
 
         self.assertEqual(ip_address, "203.0.113.20")
+
+    def test_public_go_route_minimizes_sensitive_fields_when_storage_mode_enabled(self):
+        with TemporaryDirectory() as tmp_dir:
+            temp_db = Path(tmp_dir) / "test.db"
+            with test_runtime_settings(
+                db_path=temp_db,
+                visit_storage_mode="minimized",
+                trust_proxy_headers=True,
+                trusted_proxy_networks=("172.16.0.0/12",),
+            ):
+                init_db()
+                app = create_app()
+                response = asgi_get(
+                    app,
+                    "/go/table1",
+                    client_host="172.18.0.2",
+                    headers={
+                        "x-forwarded-for": "203.0.113.10, 172.18.0.2",
+                        "user-agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)",
+                        "referer": "https://example.com/landing?utm_source=secret#frag",
+                    },
+                    follow_redirects=False,
+                )
+                self.assertEqual(response.status_code, 302)
+
+                conn = sqlite3.connect(temp_db)
+                visit_row = conn.execute(
+                    "SELECT ip_address, user_agent, referer FROM visits ORDER BY id DESC LIMIT 1"
+                ).fetchone()
+                conn.close()
+
+        self.assertEqual(visit_row[0], "203.0.113.0/24")
+        self.assertEqual(visit_row[1], "hidden")
+        self.assertEqual(visit_row[2], "https://example.com/landing")
 
     def test_concurrent_public_visits_are_recorded_without_dropping_rows(self):
         with TemporaryDirectory() as tmp_dir:
