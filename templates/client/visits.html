@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% from "components/ui.html" import data_table, empty_row, page_header, panel %}
+{% from "macros.html" import logout_form %}
+
+{% block content %}
+    {% call page_header("Мои переходы", "Подробный журнал открытий только по вашим NFC-меткам.") %}
+        {{ logout_form("/client/logout") }}
+    {% endcall %}
+
+    {% call panel("Фильтр") %}
+        <form method="get" action="/client/visits" class="toolbar">
+            <select name="tag">
+                <option value="">Все мои метки</option>
+                {% for code in tag_options %}
+                    <option value="{{ code }}" {% if code == selected_tag %}selected{% endif %}>{{ code }}</option>
+                {% endfor %}
+            </select>
+            <input name="limit" type="number" value="{{ limit }}" min="1" max="500">
+            <button type="submit" class="btn">Показать</button>
+            <a class="btn btn-secondary" href="/client/visits">Сбросить</a>
+        </form>
+    {% endcall %}
+
+    {% call panel("Результаты") %}
+        {% call data_table(["ID", "Код", "Ссылка", "Дата и время", "IP", "Referer", "User-Agent"]) %}
+            {% if visits %}
+                {% for row in visits %}
+                    <tr>
+                        <td data-label="ID">{{ row.id }}</td>
+                        <td data-label="Код" class="mono">{{ row.tag_code }}</td>
+                        <td data-label="Ссылка" class="mono">{{ row.target_url }}</td>
+                        <td data-label="Дата и время">{{ row.visited_at }}</td>
+                        <td data-label="IP">{{ row.ip_address }}</td>
+                        <td data-label="Referer" class="small">{{ row.referer }}</td>
+                        <td data-label="User-Agent" class="small">{{ row.user_agent[:120] }}</td>
+                    </tr>
+                {% endfor %}
+            {% else %}
+                {{ empty_row(7, "Переходов нет.") }}
+            {% endif %}
+        {% endcall %}
+    {% endcall %}
+{% endblock %}

@@ -1,0 +1,29 @@
+{% macro status_badge(is_active, active_label='Активна', inactive_label='Выключена') -%}
+    <span class="badge {{ 'badge-ok' if is_active else 'badge-off' }}">{{ active_label if is_active else inactive_label }}</span>
+{%- endmacro %}
+
+{% macro client_identity(client_name, client_login, client_active=None) -%}
+    {% if client_name %}
+        <div><strong>{{ client_name }}</strong></div>
+        <div class="small muted">{{ client_login }}</div>
+        {% if client_active is not none and not client_active %}
+            <div class="small muted">доступ клиента выключен</div>
+        {% endif %}
+    {% else %}
+        <span class="muted">Не назначен</span>
+    {% endif %}
+{%- endmacro %}
+
+{% macro logout_form(action) -%}
+    <form method="post" action="{{ action }}">
+        <button class="btn btn-secondary" type="submit">Выйти</button>
+    </form>
+{%- endmacro %}
+
+{% macro metric_card(label, value, note) -%}
+    <div class="card">
+        <div class="metric-label">{{ label }}</div>
+        <div class="metric-value">{{ value }}</div>
+        <div class="metric-note">{{ note }}</div>
+    </div>
+{%- endmacro %}

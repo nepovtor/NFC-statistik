@@ -1,0 +1,136 @@
+<script>
+    (function () {
+        var storageKey = "nfc-theme";
+        var copyResetDelay = 1800;
+
+        function describeTheme(theme) {
+            if (theme === "light") {
+                return {
+                    actionLabel: "Переключить на тёмную тему",
+                    statusLabel: "Сейчас светлая",
+                };
+            }
+            return {
+                actionLabel: "Переключить на светлую тему",
+                statusLabel: "Сейчас тёмная",
+            };
+        }
+
+        function persistTheme(theme) {
+            try {
+                localStorage.setItem(storageKey, theme);
+            } catch (error) {
+            }
+        }
+
+        function applyTheme(theme) {
+            var root = document.documentElement;
+            var labels = document.querySelectorAll("[data-theme-label]");
+            var statuses = document.querySelectorAll("[data-theme-status]");
+            var text = describeTheme(theme);
+
+            root.dataset.theme = theme;
+            labels.forEach(function (node) {
+                node.textContent = text.actionLabel;
+            });
+            statuses.forEach(function (node) {
+                node.textContent = text.statusLabel;
+            });
+        }
+
+        function fallbackCopyText(value) {
+            var textarea = document.createElement("textarea");
+            textarea.value = value;
+            textarea.setAttribute("readonly", "");
+            textarea.style.position = "absolute";
+            textarea.style.left = "-9999px";
+            document.body.appendChild(textarea);
+            textarea.select();
+            textarea.setSelectionRange(0, textarea.value.length);
+
+            var success = false;
+            try {
+                success = document.execCommand("copy");
+            } catch (error) {
+                success = false;
+            }
+
+            document.body.removeChild(textarea);
+            return success;
+        }
+
+        function copyText(value) {
+            if (navigator.clipboard && window.isSecureContext) {
+                return navigator.clipboard.writeText(value);
+            }
+
+            if (fallbackCopyText(value)) {
+                return Promise.resolve();
+            }
+            return Promise.reject(new Error("copy_failed"));
+        }
+
+        function showToast(message, isError) {
+            var toast = document.querySelector("[data-ui-toast]");
+            if (!toast) {
+                return;
+            }
+
+            window.clearTimeout(toast._hideTimer);
+            toast.textContent = message;
+            toast.classList.toggle("is-error", Boolean(isError));
+            toast.classList.add("is-visible");
+
+            toast._hideTimer = window.setTimeout(function () {
+                toast.classList.remove("is-visible");
+            }, 2200);
+        }
+
+        function resetCopyButton(button) {
+            var defaultLabel = button.getAttribute("data-copy-label") || "Копировать";
+            button.textContent = defaultLabel;
+            button.classList.remove("is-copied");
+        }
+
+        function handleCopyClick(button) {
+            var value = button.getAttribute("data-copy-value") || "";
+            var successLabel = button.getAttribute("data-copy-success") || "Скопировано";
+
+            copyText(value).then(function () {
+                window.clearTimeout(button._resetTimer);
+                button.textContent = successLabel;
+                button.classList.add("is-copied");
+                showToast("NFC-ссылка скопирована");
+                button._resetTimer = window.setTimeout(function () {
+                    resetCopyButton(button);
+                }, copyResetDelay);
+            }).catch(function () {
+                showToast("Не удалось скопировать ссылку. Скопируйте её вручную.", true);
+            });
+        }
+
+        document.addEventListener("DOMContentLoaded", function () {
+            var button = document.querySelector("[data-theme-toggle]");
+            var currentTheme = document.documentElement.dataset.theme || "dark";
+
+            persistTheme(currentTheme);
+            applyTheme(currentTheme);
+
+            if (button) {
+                button.addEventListener("click", function () {
+                    var nextTheme = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+                    persistTheme(nextTheme);
+                    applyTheme(nextTheme);
+                });
+            }
+
+            document.addEventListener("click", function (event) {
+                var copyButton = event.target.closest("[data-copy-value]");
+                if (!copyButton) {
+                    return;
+                }
+                handleCopyClick(copyButton);
+            });
+        });
+    })();
+</script>

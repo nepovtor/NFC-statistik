@@ -1,0 +1,22 @@
+services:
+  nfc_app:
+    build: .
+    container_name: nfc_app
+    restart: unless-stopped
+    ports:
+      - "8001:8001"
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/', timeout=5).read()"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    environment:
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-пароль}
+      ADMIN_SESSION_SECRET: ${ADMIN_SESSION_SECRET:-change-this-in-production}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:8001}
+      NFC_STATS_DB_PATH: ${NFC_STATS_DB_PATH:-/data/nfc_stats.db}
+    volumes:
+      - ./data:/data

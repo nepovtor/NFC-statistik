@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% from "components/ui.html" import data_table, empty_row, hint_box, page_header, panel %}
+{% from "macros.html" import logout_form, status_badge %}
+
+{% block content %}
+    {% call page_header("Клиенты", "Здесь создаются личные кабинеты для покупателей NFC.") %}
+        {{ logout_form("/admin/logout") }}
+    {% endcall %}
+
+    {% call panel("Как это работает") %}
+        {% call hint_box() %}
+            После создания клиента ты передаёшь ему ссылку <span class="mono">/client/login</span>, его логин и пароль. Он видит только свои метки и свои переходы.
+        {% endcall %}
+    {% endcall %}
+
+    {% call panel("Создать клиента") %}
+        <form method="post" action="/admin/clients/create">
+            <div class="forms-grid">
+                <label>
+                    <span class="field-label">Имя клиента</span>
+                    <input name="name" placeholder="Кафе Ромашка" required>
+                </label>
+                <label>
+                    <span class="field-label">Логин клиента</span>
+                    <input name="login" placeholder="cafe_romashka" required>
+                </label>
+                <label class="full">
+                    <span class="field-label">Пароль клиента</span>
+                    <input type="password" name="password" placeholder="Придумай пароль для клиента" required>
+                </label>
+            </div>
+            <div class="spacer-sm"></div>
+            <button type="submit" class="btn">Создать кабинет</button>
+        </form>
+    {% endcall %}
+
+    {% call panel("Все клиенты") %}
+        {% call data_table(["ID", "Клиент", "Логин", "Метки", "Переходы", "Статус", "Действия"]) %}
+            {% if clients %}
+                {% for row in clients %}
+                    <tr>
+                        <td data-label="ID">{{ row.id }}</td>
+                        <td data-label="Клиент"><div><strong>{{ row.name }}</strong></div><div class="small muted">{{ row.created_at }}</div></td>
+                        <td data-label="Логин" class="mono">{{ row.login }}</td>
+                        <td data-label="Метки">{{ row.tags_count }}</td>
+                        <td data-label="Переходы">{{ row.visits_count }}</td>
+                        <td data-label="Статус">{{ status_badge(row.is_active, "Доступ открыт", "Доступ выключен") }}</td>
+                        <td data-label="Действия">
+                            <form method="post" action="/admin/clients/{{ row.id }}/toggle">
+                                <button class="btn btn-secondary" type="submit">{{ 'Закрыть доступ' if row.is_active else 'Открыть доступ' }}</button>
+                            </form>
+                        </td>
+                    </tr>
+                {% endfor %}
+            {% else %}
+                {{ empty_row(7, "Пока клиентов нет.") }}
+            {% endif %}
+        {% endcall %}
+    {% endcall %}
+{% endblock %}

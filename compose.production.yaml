@@ -1,0 +1,41 @@
+services:
+  nfc_app:
+    build: .
+    container_name: nfc_app_prod
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/', timeout=5).read()"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    env_file:
+      - .env.production
+    environment:
+      ADMIN_TAILSCALE_ONLY: "1"
+      TRUST_PROXY_HEADERS: "1"
+      NFC_STATS_DB_PATH: /data/nfc_stats.db
+    expose:
+      - "8001"
+    ports:
+      - "127.0.0.1:8001:8001"
+    volumes:
+      - ./data:/data
+
+  caddy:
+    image: caddy:2.10-alpine
+    container_name: nfc_proxy_prod
+    restart: unless-stopped
+    depends_on:
+      - nfc_app
+    env_file:
+      - .env.production
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./caddy_data:/data
+      - ./caddy_config:/config

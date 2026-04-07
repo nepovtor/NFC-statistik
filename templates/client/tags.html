@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% from "components/ui.html" import copy_button, hint_box, page_header, panel %}
+{% from "macros.html" import logout_form, status_badge %}
+
+{% block content %}
+    {% call page_header("Мои NFC", "Здесь видны ваши коды, рабочие NFC-ссылки и текущий статус каждой метки.") %}
+        {{ logout_form("/client/logout") }}
+    {% endcall %}
+
+    {% call panel("Что записывать в NFC") %}
+        {% call hint_box() %}
+            В поле <span class="mono">NFC-ссылка</span> показан полный адрес, который нужно записывать в саму NFC-метку. Когда пользователь откроет этот адрес, система посчитает переход и отправит человека дальше на нужную страницу. Сейчас приложение строит ссылки от базы <span class="mono">{{ public_base_url }}</span>. Для реальной выдачи клиентам укажи переменную окружения <span class="mono">PUBLIC_BASE_URL</span>, например <span class="mono">https://nfc.yourdomain.com</span>.
+        {% endcall %}
+    {% endcall %}
+
+    {% if tags %}
+        <section class="tag-grid">
+            {% for row in tags %}
+                <article class="panel tag-card">
+                    <div class="tag-card-top">
+                        <div>
+                            <h2 class="tag-card-title">{{ row.name }}</h2>
+                            <div class="small muted mono">{{ row.code }}</div>
+                        </div>
+                        <div class="stack">
+                            {{ status_badge(row.is_active) }}
+                            <div class="small muted">{{ row.clicks }} переходов</div>
+                        </div>
+                    </div>
+
+                    <div class="meta-list">
+                        <div class="meta-item">
+                            <div class="meta-label">NFC-ссылка</div>
+                            <div class="meta-stack">
+                                <div class="meta-value mono">{{ row.public_url }}</div>
+                                {{ copy_button(row.public_url) }}
+                            </div>
+                        </div>
+                        <div class="meta-item">
+                            <div class="meta-label">Текущая ссылка назначения</div>
+                            <div class="meta-value mono">{{ row.target_url }}</div>
+                        </div>
+                        <div class="meta-item">
+                            <div class="meta-label">Создана</div>
+                            <div class="meta-value">{{ row.created_at }}</div>
+                        </div>
+                    </div>
+
+                    <form method="post" action="/client/tags/{{ row.id }}/update" class="stack">
+                        <div class="forms-grid">
+                            <label>
+                                <span class="field-label">Название метки</span>
+                                <input name="name" value="{{ row.name }}" required>
+                            </label>
+                            <label>
+                                <span class="field-label">Статус</span>
+                                <select name="is_active">
+                                    <option value="1" {% if row.is_active %}selected{% endif %}>Активна</option>
+                                    <option value="0" {% if not row.is_active %}selected{% endif %}>Выключена</option>
+                                </select>
+                            </label>
+                            <label class="full">
+                                <span class="field-label">Куда должен попадать пользователь</span>
+                                <input name="target_url" value="{{ row.target_url }}" placeholder="https://your-site.com/menu/table7" required>
+                            </label>
+                        </div>
+                        <div class="form-actions">
+                            <button type="submit" class="btn">Сохранить изменения</button>
+                        </div>
+                    </form>
+                </article>
+            {% endfor %}
+        </section>
+    {% else %}
+        {% call panel("Ваши метки") %}
+            <div class="muted">У вас пока нет назначенных меток.</div>
+        {% endcall %}
+    {% endif %}
+{% endblock %}

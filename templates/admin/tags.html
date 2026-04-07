@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% from "components/ui.html" import data_table, empty_row, hint_box, page_header, panel %}
+{% from "macros.html" import client_identity, logout_form, status_badge %}
+
+{% block content %}
+    {% call page_header("Метки и ссылки", "Здесь создаются коды NFC, ссылки и назначаются владельцы.") %}
+        {{ logout_form("/admin/logout") }}
+    {% endcall %}
+
+    {% call panel("Добавить новую метку") %}
+        <form method="post" action="/admin/tags/create">
+            <div class="forms-grid">
+                <label>
+                    <span class="field-label">Код метки</span>
+                    <input name="code" placeholder="menu-table-7" required>
+                </label>
+                <label>
+                    <span class="field-label">Понятное название</span>
+                    <input name="name" placeholder="Стол 7">
+                </label>
+                <label class="full">
+                    <span class="field-label">Ссылка, куда должен попасть человек</span>
+                    <input name="target_url" placeholder="https://your-site.com/menu/table7" required>
+                </label>
+                <label class="full">
+                    <span class="field-label">Владелец метки</span>
+                    <select name="client_id">
+                        <option value="">Без владельца</option>
+                        {% for client in clients %}
+                            <option value="{{ client.id }}">
+                                {{ client.name }} ({{ client.login }}){% if not client.is_active %} - доступ выключен{% endif %}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </label>
+            </div>
+            <div class="spacer-sm"></div>
+            <button type="submit" class="btn">Создать метку</button>
+        </form>
+    {% endcall %}
+
+    {% call panel("Все метки") %}
+        {% call hint_box() %}
+            Если назначить владельца, эта NFC-метка появится у клиента в личном кабинете. Без владельца метка видна только в админке.
+        {% endcall %}
+        <div class="spacer-sm"></div>
+        {% call data_table(["ID", "Код", "Название", "Ссылка", "Клиент", "Переходы", "Статус", "Действия"]) %}
+            {% if tags %}
+                {% for row in tags %}
+                    <tr>
+                        <td data-label="ID">{{ row.id }}</td>
+                        <td data-label="Код" class="mono">{{ row.code }}</td>
+                        <td data-label="Название">{{ row.name }}</td>
+                        <td data-label="Ссылка" class="mono">{{ row.target_url }}</td>
+                        <td data-label="Клиент">{{ client_identity(row.client_name, row.client_login, row.client_is_active) }}</td>
+                        <td data-label="Переходы">{{ row.clicks }}</td>
+                        <td data-label="Статус">{{ status_badge(row.is_active) }}</td>
+                        <td data-label="Действия">
+                            <div class="stack">
+                                <form method="post" action="/admin/tags/{{ row.id }}/assign" class="stack">
+                                    <select name="client_id">
+                                        <option value="">Без владельца</option>
+                                        {% for client in clients %}
+                                            <option value="{{ client.id }}" {% if client.id == row.client_id %}selected{% endif %}>
+                                                {{ client.name }} ({{ client.login }}){% if not client.is_active %} - доступ выключен{% endif %}
+                                            </option>
+                                        {% endfor %}
+                                    </select>
+                                    <button class="btn btn-secondary" type="submit">Сохранить владельца</button>
+                                </form>
+                                <div class="inline-actions">
+                                    <form method="post" action="/admin/tags/{{ row.id }}/toggle">
+                                        <button class="btn btn-secondary" type="submit">{{ 'Выключить' if row.is_active else 'Включить' }}</button>
+                                    </form>
+                                    <form method="post" action="/admin/tags/{{ row.id }}/delete" onsubmit="return confirm('Удалить метку?')">
+                                        <button class="btn btn-danger" type="submit">Удалить</button>
+                                    </form>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                {% endfor %}
+            {% else %}
+                {{ empty_row(8, "Пока меток нет.") }}
+            {% endif %}
+        {% endcall %}
+    {% endcall %}
+{% endblock %}

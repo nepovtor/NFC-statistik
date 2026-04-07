@@ -1,0 +1,15 @@
+<aside class="sidebar">
+    <div class="sidebar-head">
+        <div>
+            <div class="brand">{{ brand }}</div>
+            <div class="brand-sub">{{ brand_subtitle }}</div>
+        </div>
+        {% include "partials/theme_toggle.html" %}
+    </div>
+
+    <nav class="nav">
+        {% for href, label in nav_links %}
+            <a href="{{ href }}" class="nav-link{% if href == active_nav %} is-active{% endif %}">{{ label }}</a>
+        {% endfor %}
+    </nav>
+</aside>

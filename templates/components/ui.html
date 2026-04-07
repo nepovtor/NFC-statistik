@@ -1,0 +1,87 @@
+{% macro page_header(title, subtitle='') -%}
+    <div class="topbar">
+        <div>
+            <h1 class="title">{{ title }}</h1>
+            {% if subtitle %}
+                <div class="subtitle">{{ subtitle }}</div>
+            {% endif %}
+        </div>
+        {% if caller is defined %}
+            <div class="toolbar-end">{{ caller() }}</div>
+        {% endif %}
+    </div>
+{%- endmacro %}
+
+{% macro panel(title='', class_name='panel') -%}
+    <section class="{{ class_name }}">
+        {% if title %}
+            <div class="panel-head">
+                <h2>{{ title }}</h2>
+            </div>
+        {% endif %}
+        {% if caller is defined %}
+            {{ caller() }}
+        {% endif %}
+    </section>
+{%- endmacro %}
+
+{% macro hint_box(class_name='hint') -%}
+    <div class="{{ class_name }}">
+        {% if caller is defined %}
+            {{ caller() }}
+        {% endif %}
+    </div>
+{%- endmacro %}
+
+{% macro bar_chart(rows, empty_text='Пока нет данных.') -%}
+    <div class="chart">
+        {% if rows %}
+            {% for row in rows %}
+                <div class="bar-row">
+                    <div class="mono">{{ row.tag_code }}</div>
+                    <div class="bar-track"><div class="bar-fill" style="width: {{ row.width }}%"></div></div>
+                    <div>{{ row.total_clicks }}</div>
+                </div>
+            {% endfor %}
+        {% else %}
+            <div class="muted">{{ empty_text }}</div>
+        {% endif %}
+    </div>
+{%- endmacro %}
+
+{% macro data_table(headers) -%}
+    <div class="table-wrap">
+        <table class="responsive-table">
+            <thead>
+                <tr>
+                    {% for header in headers %}
+                        <th>{{ header }}</th>
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+                {% if caller is defined %}
+                    {{ caller() }}
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+{%- endmacro %}
+
+{% macro empty_row(colspan, text) -%}
+    <tr>
+        <td colspan="{{ colspan }}">{{ text }}</td>
+    </tr>
+{%- endmacro %}
+
+{% macro copy_button(value, label='Копировать NFC-ссылку', success_label='Скопировано', class_name='btn btn-secondary') -%}
+    <button
+        type="button"
+        class="{{ class_name }}"
+        data-copy-value="{{ value }}"
+        data-copy-label="{{ label }}"
+        data-copy-success="{{ success_label }}"
+    >
+        {{ label }}
+    </button>
+{%- endmacro %}

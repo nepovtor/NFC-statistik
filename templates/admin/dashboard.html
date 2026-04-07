@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% from "components/ui.html" import bar_chart, data_table, empty_row, hint_box, page_header, panel %}
+{% from "macros.html" import client_identity, logout_form, metric_card, status_badge %}
+
+{% block content %}
+    {% call page_header("Дашборд", "Теперь здесь видно и общую статистику, и клиентские кабинеты.") %}
+        <a class="btn" href="/admin/clients">Клиенты</a>
+        <a class="btn btn-secondary" href="/admin/tags">Метки</a>
+        {{ logout_form("/admin/logout") }}
+    {% endcall %}
+
+    <div class="cards">
+        {{ metric_card("Всего переходов", total_visits, "Все открытия NFC-ссылок") }}
+        {{ metric_card("Переходы сегодня", today_visits, "С 00:00 текущего дня") }}
+        {{ metric_card("За последние 24 часа", last_24h_visits, "Живая активность") }}
+        {{ metric_card("Клиенты", total_clients, "Личных кабинетов создано") }}
+        {{ metric_card("Метки у клиентов", assigned_tags ~ "/" ~ total_tags, "Назначено / всего") }}
+        {{ metric_card("Активные метки", active_tags, "Сейчас принимают переходы") }}
+    </div>
+
+    <div class="grid-2">
+        {% call panel("Топ меток") %}
+            {{ bar_chart(chart_rows, "Пока нет переходов.") }}
+        {% endcall %}
+
+        {% call panel("Что изменилось") %}
+            {% call hint_box() %}
+                Теперь можно создавать клиентов, выдавать им логин и пароль, а они будут видеть только свои NFC-метки и свою статистику в личном кабинете.
+            {% endcall %}
+            <div class="spacer-sm"></div>
+            <div class="toolbar">
+                <a class="btn" href="/admin/clients">Открыть клиентов</a>
+                <a class="btn btn-secondary" href="/client/login">Страница входа клиента</a>
+            </div>
+        {% endcall %}
+    </div>
+
+    {% call panel("Лучшие метки") %}
+        {% call data_table(["Метка", "Куда ведёт", "Клиент", "Переходы", "Статус"]) %}
+            {% if tags %}
+                {% for row in tags %}
+                    <tr>
+                        <td data-label="Метка"><div><strong>{{ row.name }}</strong></div><div class="small muted mono">{{ row.code }}</div></td>
+                        <td data-label="Куда ведёт" class="mono">{{ row.target_url }}</td>
+                        <td data-label="Клиент">{{ client_identity(row.client_name, row.client_login, row.client_is_active) }}</td>
+                        <td data-label="Переходы">{{ row.clicks }}</td>
+                        <td data-label="Статус">{{ status_badge(row.is_active) }}</td>
+                    </tr>
+                {% endfor %}
+            {% else %}
+                {{ empty_row(5, "Пока меток нет.") }}
+            {% endif %}
+        {% endcall %}
+    {% endcall %}
+
+    {% call panel("Последние 10 переходов") %}
+        {% call data_table(["ID", "Код", "Дата и время", "IP", "User-Agent"]) %}
+            {% if last_visits %}
+                {% for row in last_visits %}
+                    <tr>
+                        <td data-label="ID">{{ row.id }}</td>
+                        <td data-label="Код" class="mono">{{ row.tag_code }}</td>
+                        <td data-label="Дата и время">{{ row.visited_at }}</td>
+                        <td data-label="IP">{{ row.ip_address }}</td>
+                        <td data-label="User-Agent" class="small">{{ row.user_agent[:110] }}</td>
+                    </tr>
+                {% endfor %}
+            {% else %}
+                {{ empty_row(5, "Переходов ещё нет.") }}
+            {% endif %}
+        {% endcall %}
+    {% endcall %}
+{% endblock %}

@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="ru">
+<head>
+    {% include "partials/head.html" %}
+    {% block head_extra %}{% endblock %}
+</head>
+<body>
+    <div class="site-shell">
+        {% include "partials/sidebar.html" %}
+
+        <main class="main">
+            {% if message %}
+                <div class="flash">{{ message }}</div>
+            {% endif %}
+            {% block content %}{% endblock %}
+        </main>
+    </div>
+    {% include "partials/ui_toast.html" %}
+    {% include "partials/ui_scripts.html" %}
+    {% block body_end %}{% endblock %}
+</body>
+</html>

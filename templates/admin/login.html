@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% from "components/ui.html" import page_header, panel %}
+
+{% block content %}
+    {{ page_header("Вход в админку", "Для управления метками, клиентами и статистикой нужен пароль администратора.") }}
+
+    {% call panel("Введите пароль", "panel auth-panel") %}
+        <form method="post" action="/admin/login" class="stack">
+            <input type="hidden" name="next" value="{{ next_path }}">
+            <label>
+                <span class="field-label">Пароль администратора</span>
+                <input type="password" name="password" placeholder="Введите пароль" required>
+            </label>
+            <button type="submit" class="btn">Войти</button>
+        </form>
+    {% endcall %}
+{% endblock %}

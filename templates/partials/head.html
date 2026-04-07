@@ -1,0 +1,26 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ page_title }}</title>
+<script>
+    (function () {
+        var storageKey = "nfc-theme";
+        var root = document.documentElement;
+        var fallbackTheme = "dark";
+
+        try {
+            var savedTheme = localStorage.getItem(storageKey);
+            if (savedTheme === "light" || savedTheme === "dark") {
+                root.dataset.theme = savedTheme;
+                return;
+            }
+        } catch (error) {
+        }
+
+        try {
+            localStorage.setItem(storageKey, fallbackTheme);
+        } catch (error) {
+        }
+        root.dataset.theme = fallbackTheme;
+    })();
+</script>
+<link rel="stylesheet" href="{{ request.url_for('static', path='styles.css') }}">
