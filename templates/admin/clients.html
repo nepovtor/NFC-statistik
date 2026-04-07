@@ -39,10 +39,10 @@
     {% endcall %}
 
     {% call panel("Все клиенты") %}
-        {% call data_table(["ID", "Клиент", "Логин", "Метки", "Переходы", "Статус", "Действия"]) %}
+        {% call data_table(["ID", "Клиент", "Логин", "Метки", "Переходы", "Статус", "Действия"], true, "Быстрый поиск по имени, логину или статусу") %}
             {% if clients %}
                 {% for row in clients %}
-                    <tr>
+                    <tr class="{{ 'row-state-ok' if row.is_active else 'row-state-off' }}">
                         <td data-label="ID">{{ row.id }}</td>
                         <td data-label="Клиент"><div><strong>{{ row.name }}</strong></div><div class="small muted">{{ row.created_at }}</div></td>
                         <td data-label="Логин" class="mono">{{ row.login }}</td>
@@ -58,7 +58,7 @@
                     </tr>
                 {% endfor %}
             {% else %}
-                {{ empty_row(7, "Пока клиентов нет.") }}
+                {{ empty_row(7, "Пока клиентов нет", "Создай первый кабинет, чтобы выдать отдельный доступ к NFC-меткам и статистике.", "#create-client", "Создать клиента", "clients", "btn btn-hero") }}
             {% endif %}
         {% endcall %}
     {% endcall %}

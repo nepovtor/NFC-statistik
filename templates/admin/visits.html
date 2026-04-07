@@ -30,7 +30,7 @@
     {% endcall %}
 
     {% call panel("Результаты") %}
-        {% call data_table(["ID", "Код", "Клиент", "Ссылка", "Дата и время", "IP", "Referer", "User-Agent"]) %}
+        {% call data_table(["ID", "Код", "Клиент", "Ссылка", "Дата и время", "IP", "Referer", "User-Agent"], true, "Быстрый поиск по коду, клиенту, IP или ссылке") %}
             {% if visits %}
                 {% for row in visits %}
                     <tr>
@@ -45,7 +45,7 @@
                     </tr>
                 {% endfor %}
             {% else %}
-                {{ empty_row(8, "Переходов нет.") }}
+                {{ empty_row(8, "Переходов пока нет", "Как только кто-то откроет NFC-ссылку, здесь появится журнал с IP, referer и временем визита.", "/admin/tags#create-tag", "Открыть метки", "visits") }}
             {% endif %}
         {% endcall %}
     {% endcall %}

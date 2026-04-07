@@ -1,6 +1,7 @@
 <script>
     (function () {
         var storageKey = "nfc-theme";
+        var tableCompactStorageKey = "nfc-table-compact";
         var copyResetDelay = 1800;
 
         function describeTheme(theme) {
@@ -109,6 +110,115 @@
             });
         }
 
+        function getTableStorageKey(index) {
+            return tableCompactStorageKey + ":" + window.location.pathname + ":" + index;
+        }
+
+        function initTableWidgets() {
+            var widgets = document.querySelectorAll("[data-table-widget]");
+
+            widgets.forEach(function (widget, index) {
+                var searchInput = widget.querySelector("[data-table-search]");
+                var counter = widget.querySelector("[data-table-counter]");
+                var compactToggle = widget.querySelector("[data-table-compact-toggle]");
+                var tableWrap = widget.querySelector("[data-table-wrap]");
+                var emptySearchRow = widget.querySelector("[data-table-empty]");
+                var rows = Array.from(widget.querySelectorAll("tbody tr")).filter(function (row) {
+                    return !row.hasAttribute("data-empty-row") && !row.hasAttribute("data-table-empty");
+                });
+                var storageKey = getTableStorageKey(index);
+
+                function updateCounter(visibleRows) {
+                    if (!counter) {
+                        return;
+                    }
+
+                    if (!rows.length) {
+                        counter.textContent = "0 строк";
+                        return;
+                    }
+
+                    if (visibleRows === rows.length) {
+                        counter.textContent = "Показаны все строки: " + rows.length;
+                        return;
+                    }
+
+                    counter.textContent = "Показано " + visibleRows + " из " + rows.length;
+                }
+
+                function applyTableFilter() {
+                    var query = (searchInput ? searchInput.value : "").trim().toLowerCase();
+                    var visibleRows = 0;
+
+                    rows.forEach(function (row) {
+                        var matches = !query || row.textContent.toLowerCase().indexOf(query) !== -1;
+                        row.hidden = !matches;
+                        if (matches) {
+                            visibleRows += 1;
+                        }
+                    });
+
+                    if (emptySearchRow) {
+                        emptySearchRow.hidden = !(rows.length && visibleRows === 0 && query);
+                    }
+
+                    updateCounter(visibleRows);
+                }
+
+                function updateCompactToggle(isCompact) {
+                    if (!compactToggle) {
+                        return;
+                    }
+                    var label = isCompact
+                        ? compactToggle.getAttribute("data-active-label")
+                        : compactToggle.getAttribute("data-default-label");
+                    compactToggle.classList.toggle("is-active", isCompact);
+                    compactToggle.querySelector("span").textContent = label || "Компактно";
+                }
+
+                function applyCompactState(isCompact) {
+                    if (!tableWrap) {
+                        return;
+                    }
+                    tableWrap.classList.toggle("is-compact", isCompact);
+                    updateCompactToggle(isCompact);
+                    try {
+                        localStorage.setItem(storageKey, isCompact ? "1" : "0");
+                    } catch (error) {
+                    }
+                }
+
+                if (!rows.length) {
+                    if (searchInput) {
+                        searchInput.disabled = true;
+                    }
+                    if (compactToggle) {
+                        compactToggle.disabled = true;
+                    }
+                }
+
+                if (searchInput) {
+                    searchInput.addEventListener("input", applyTableFilter);
+                }
+
+                if (compactToggle) {
+                    compactToggle.addEventListener("click", function () {
+                        var isCompact = !tableWrap.classList.contains("is-compact");
+                        applyCompactState(isCompact);
+                    });
+                }
+
+                var savedCompact = "0";
+                try {
+                    savedCompact = localStorage.getItem(storageKey) || "0";
+                } catch (error) {
+                }
+
+                applyCompactState(savedCompact === "1");
+                applyTableFilter();
+            });
+        }
+
         document.addEventListener("DOMContentLoaded", function () {
             var button = document.querySelector("[data-theme-toggle]");
             var currentTheme = document.documentElement.dataset.theme || "dark";
@@ -123,6 +233,8 @@
                     applyTheme(nextTheme);
                 });
             }
+
+            initTableWidgets();
 
             document.addEventListener("click", function (event) {
                 var copyButton = event.target.closest("[data-copy-value]");

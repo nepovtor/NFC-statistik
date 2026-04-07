@@ -1,9 +1,10 @@
 {% extends "base.html" %}
-{% from "components/ui.html" import copy_button, hint_box, page_header, panel %}
-{% from "macros.html" import csrf_input, logout_form, status_badge %}
+{% from "components/ui.html" import copy_button, empty_state, hint_box, page_header, panel %}
+{% from "macros.html" import csrf_input, icon, logout_form, status_badge %}
 
 {% block content %}
     {% call page_header("Мои NFC", "Здесь видны ваши коды, рабочие NFC-ссылки и текущий статус каждой метки.") %}
+        <a class="btn btn-secondary" href="/client/visits">{{ icon('visits') }}<span>Переходы</span></a>
         {{ logout_form("/client/logout", csrf_token) }}
     {% endcall %}
 
@@ -74,7 +75,13 @@
         </section>
     {% else %}
         {% call panel("Ваши метки") %}
-            <div class="muted">У вас пока нет назначенных меток.</div>
+            {{ empty_state(
+                "У вас пока нет назначенных меток",
+                "Когда администратор привяжет к вашему кабинету NFC-метку, она появится здесь вместе с рабочей ссылкой и настройками.",
+                "/client",
+                "Вернуться в кабинет",
+                "tags"
+            ) }}
         {% endcall %}
     {% endif %}
 {% endblock %}

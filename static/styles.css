@@ -345,7 +345,110 @@ button .icon {
 }
 
 .table-wrap {
-    overflow-x: auto;
+    overflow: auto;
+    max-height: min(68vh, 760px);
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    background: rgba(2, 6, 23, 0.12);
+    scrollbar-width: thin;
+}
+
+.table-shell {
+    display: grid;
+    gap: 12px;
+}
+
+.table-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.table-toolbar-meta {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.table-search {
+    position: relative;
+    flex: 1 1 320px;
+}
+
+.table-search input {
+    padding-left: 42px;
+}
+
+.table-search-icon {
+    position: absolute;
+    left: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--muted);
+    pointer-events: none;
+}
+
+.table-counter {
+    min-height: 38px;
+    display: inline-flex;
+    align-items: center;
+}
+
+.btn-table-toggle.is-active {
+    color: var(--text);
+    background: rgba(56, 189, 248, 0.08);
+}
+
+.empty-state {
+    display: grid;
+    justify-items: center;
+    gap: 12px;
+    padding: 18px;
+    text-align: center;
+}
+
+.empty-state-inline {
+    padding: 22px 14px;
+}
+
+.empty-state-visual {
+    width: 54px;
+    height: 54px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 18px;
+    border: 1px solid rgba(56, 189, 248, 0.18);
+    background: rgba(56, 189, 248, 0.08);
+    color: var(--accent);
+}
+
+.empty-state-icon {
+    width: 24px;
+    height: 24px;
+}
+
+.empty-state-title {
+    font-size: 17px;
+    font-weight: 800;
+}
+
+.empty-state-text {
+    max-width: 580px;
+    color: var(--muted);
+    line-height: 1.55;
+}
+
+.empty-state-actions {
+    display: flex;
+    justify-content: center;
+}
+
+.empty-state-actions .btn {
+    min-width: 200px;
 }
 
 label {
@@ -599,12 +702,33 @@ button:hover,
     border-collapse: collapse;
 }
 
+.responsive-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: rgba(8, 17, 32, 0.94);
+    backdrop-filter: blur(14px);
+}
+
+:root[data-theme="light"] .responsive-table thead th {
+    background: rgba(255, 255, 255, 0.95);
+}
+
 .responsive-table th,
 .responsive-table td {
     text-align: left;
     padding: 12px 10px;
     border-bottom: 1px solid var(--line);
     vertical-align: top;
+}
+
+.table-wrap.is-compact .responsive-table th,
+.table-wrap.is-compact .responsive-table td {
+    padding: 8px 10px;
+}
+
+.table-wrap.is-compact .responsive-table td {
+    font-size: 13px;
 }
 
 .responsive-table th {
@@ -614,6 +738,47 @@ button:hover,
 
 .responsive-table td {
     font-size: 14px;
+}
+
+.responsive-table tbody tr {
+    transition: background-color 0.18s ease;
+}
+
+.responsive-table tbody tr:hover {
+    background: rgba(56, 189, 248, 0.04);
+}
+
+.responsive-table tbody tr[data-empty-row]:hover,
+.responsive-table tbody tr[data-table-empty]:hover {
+    background: transparent;
+}
+
+.row-state-ok td:first-child,
+.row-state-off td:first-child {
+    position: relative;
+}
+
+.row-state-ok td:first-child::before,
+.row-state-off td:first-child::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 8px;
+    bottom: 8px;
+    width: 3px;
+    border-radius: 999px;
+}
+
+.row-state-ok td:first-child::before {
+    background: rgba(34, 197, 94, 0.8);
+}
+
+.row-state-off td:first-child::before {
+    background: rgba(249, 115, 22, 0.86);
+}
+
+.row-state-off {
+    background: rgba(249, 115, 22, 0.03);
 }
 
 .auth-panel {

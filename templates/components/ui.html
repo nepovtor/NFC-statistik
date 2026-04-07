@@ -1,3 +1,5 @@
+{% from "macros.html" import icon %}
+
 {% macro page_header(title, subtitle='') -%}
     <div class="topbar">
         <div class="topbar-copy">
@@ -49,9 +51,58 @@
     </div>
 {%- endmacro %}
 
-{% macro data_table(headers) -%}
-    <div class="table-wrap">
-        <table class="responsive-table">
+{% macro empty_state(
+    title,
+    text='',
+    action_href='',
+    action_label='',
+    icon_name='spark',
+    class_name='empty-state',
+    action_class='btn btn-secondary'
+) -%}
+    <div class="{{ class_name }}">
+        <div class="empty-state-visual">{{ icon(icon_name, 'icon empty-state-icon') }}</div>
+        <div class="empty-state-title">{{ title }}</div>
+        {% if text %}
+            <div class="empty-state-text">{{ text }}</div>
+        {% endif %}
+        {% if action_href and action_label %}
+            <div class="empty-state-actions">
+                <a class="{{ action_class }}" href="{{ action_href }}">{{ icon('open') }}<span>{{ action_label }}</span></a>
+            </div>
+        {% endif %}
+    </div>
+{%- endmacro %}
+
+{% macro data_table(headers, searchable=false, search_placeholder='Быстрый фильтр по таблице') -%}
+    <div class="table-shell" data-table-widget>
+        {% if searchable %}
+            <div class="table-toolbar">
+                <label class="table-search">
+                    <span class="table-search-icon">{{ icon('spark') }}</span>
+                    <input
+                        type="search"
+                        placeholder="{{ search_placeholder }}"
+                        autocomplete="off"
+                        data-table-search
+                    >
+                </label>
+                <div class="table-toolbar-meta">
+                    <div class="table-counter small muted" data-table-counter></div>
+                    <button
+                        type="button"
+                        class="btn btn-ghost btn-table-toggle"
+                        data-table-compact-toggle
+                        data-default-label="Компактно"
+                        data-active-label="Обычные строки"
+                    >
+                        {{ icon('dashboard') }}<span>Компактно</span>
+                    </button>
+                </div>
+            </div>
+        {% endif %}
+        <div class="table-wrap" data-table-wrap>
+            <table class="responsive-table">
             <thead>
                 <tr>
                     {% for header in headers %}
@@ -59,18 +110,47 @@
                     {% endfor %}
                 </tr>
             </thead>
-            <tbody>
+            <tbody data-table-body>
                 {% if caller is defined %}
                     {{ caller() }}
                 {% endif %}
+                <tr data-table-empty hidden>
+                    <td colspan="{{ headers|length }}">
+                        {{ empty_state(
+                            "Ничего не найдено",
+                            "Измени быстрый фильтр или очисти запрос, чтобы снова увидеть строки таблицы.",
+                            icon_name='spark',
+                            class_name='empty-state empty-state-inline'
+                        ) }}
+                    </td>
+                </tr>
             </tbody>
-        </table>
+            </table>
+        </div>
     </div>
 {%- endmacro %}
 
-{% macro empty_row(colspan, text) -%}
-    <tr>
-        <td colspan="{{ colspan }}">{{ text }}</td>
+{% macro empty_row(
+    colspan,
+    title,
+    text='',
+    action_href='',
+    action_label='',
+    icon_name='spark',
+    action_class='btn btn-secondary'
+) -%}
+    <tr data-empty-row>
+        <td colspan="{{ colspan }}">
+            {{ empty_state(
+                title,
+                text,
+                action_href,
+                action_label,
+                icon_name,
+                'empty-state empty-state-inline',
+                action_class
+            ) }}
+        </td>
     </tr>
 {%- endmacro %}
 

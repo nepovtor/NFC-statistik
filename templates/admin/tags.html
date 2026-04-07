@@ -48,10 +48,10 @@
             Если назначить владельца, эта NFC-метка появится у клиента в личном кабинете. Без владельца метка видна только в админке.
         {% endcall %}
         <div class="spacer-sm"></div>
-        {% call data_table(["ID", "Код", "Название", "Ссылка", "Клиент", "Переходы", "Статус", "Действия"]) %}
+        {% call data_table(["ID", "Код", "Название", "Ссылка", "Клиент", "Переходы", "Статус", "Действия"], true, "Быстрый поиск по коду, ссылке, клиенту или статусу") %}
             {% if tags %}
                 {% for row in tags %}
-                    <tr>
+                    <tr class="{{ 'row-state-ok' if row.is_active else 'row-state-off' }}">
                         <td data-label="ID">{{ row.id }}</td>
                         <td data-label="Код" class="mono">{{ row.code }}</td>
                         <td data-label="Название">{{ row.name }}</td>
@@ -88,7 +88,7 @@
                     </tr>
                 {% endfor %}
             {% else %}
-                {{ empty_row(8, "Пока меток нет.") }}
+                {{ empty_row(8, "Пока меток нет", "Добавь первую NFC-метку, чтобы начать вести статистику и назначать владельцев.", "#create-tag", "Создать метку", "tags", "btn btn-hero") }}
             {% endif %}
         {% endcall %}
     {% endcall %}
