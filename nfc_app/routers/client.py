@@ -9,15 +9,20 @@ from fastapi import APIRouter, Form, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
 from ..auth import (
-    build_client_cookie,
+    SESSION_SCOPE_CLIENT,
+    clear_scope_cookie,
+    create_client_session,
+    ensure_scope_session,
     get_current_client,
+    revoke_scope_session,
     require_client,
     safe_client_path,
+    set_scope_cookie,
+    validate_csrf_token,
     verify_password,
 )
 from ..database import get_connection
 from ..dashboard_service import get_client_dashboard_data
-from ..settings import settings
 from ..ui import client_context, templates
 from ..urls import build_public_tag_url, get_public_base_url
 from ..validators import is_public_http_url
@@ -45,13 +50,31 @@ def build_chart_rows(top_tags: list[dict]) -> list[dict]:
     return chart_rows
 
 
+def client_message_url(path: str, message: str) -> str:
+    separator = "&" if "?" in path else "?"
+    return path + separator + "message=" + quote_plus(message)
+
+
+def require_client_post(request: Request, csrf_token: str, redirect_path: str) -> Optional[RedirectResponse]:
+    auth_redirect = require_client(request)
+    if auth_redirect:
+        return auth_redirect
+    if validate_csrf_token(request, SESSION_SCOPE_CLIENT, csrf_token):
+        return None
+    return RedirectResponse(
+        url=client_message_url(redirect_path, "Сессия формы истекла. Обновите страницу и повторите действие."),
+        status_code=303,
+    )
+
+
 @router.get("/client/login", response_class=HTMLResponse)
 def client_login_page(request: Request, message: Optional[str] = None, next: str = Query("/client")):
     next_path = safe_client_path(next)
     if get_current_client(request):
         return RedirectResponse(url=next_path, status_code=303)
 
-    return templates.TemplateResponse(
+    _, raw_token = ensure_scope_session(request, SESSION_SCOPE_CLIENT)
+    response = templates.TemplateResponse(
         request,
         "client/login.html",
         client_context(
@@ -62,6 +85,9 @@ def client_login_page(request: Request, message: Optional[str] = None, next: str
             next_path=next_path,
         ),
     )
+    if raw_token:
+        set_scope_cookie(response, SESSION_SCOPE_CLIENT, raw_token)
+    return response
 
 
 @router.post("/client/login")
@@ -70,9 +96,19 @@ def client_login_submit(
     login: str = Form(...),
     password: str = Form(...),
     next: str = Form("/client"),
+    csrf_token: str = Form(...),
 ):
     next_path = safe_client_path(next)
     login = login.strip().lower()
+
+    if not validate_csrf_token(request, SESSION_SCOPE_CLIENT, csrf_token):
+        revoke_scope_session(request, SESSION_SCOPE_CLIENT)
+        response = RedirectResponse(
+            url="/client/login?message=" + quote_plus("Сессия входа устарела. Обновите страницу и попробуйте снова.") + "&next=" + quote_plus(next_path),
+            status_code=303,
+        )
+        clear_scope_cookie(response, SESSION_SCOPE_CLIENT)
+        return response
 
     conn = get_connection()
     cur = conn.cursor()
@@ -88,8 +124,9 @@ def client_login_submit(
     conn.close()
 
     if client and int(client["is_active"]) == 1 and verify_password(password, client["password_hash"]):
+        _, raw_token = create_client_session(request, client["id"])
         response = RedirectResponse(url=next_path, status_code=303)
-        response.set_cookie(settings.client_cookie_name, build_client_cookie(client["id"]), httponly=True, samesite="lax", max_age=60 * 60 * 12)
+        set_scope_cookie(response, SESSION_SCOPE_CLIENT, raw_token)
         return response
 
     return RedirectResponse(
@@ -99,9 +136,16 @@ def client_login_submit(
 
 
 @router.post("/client/logout")
-def client_logout(request: Request):
+def client_logout(request: Request, csrf_token: str = Form(...)):
+    if not validate_csrf_token(request, SESSION_SCOPE_CLIENT, csrf_token):
+        return RedirectResponse(
+            url=client_message_url("/client", "Сессия формы истекла. Обновите страницу и повторите действие."),
+            status_code=303,
+        )
+
+    revoke_scope_session(request, SESSION_SCOPE_CLIENT)
     response = RedirectResponse(url="/client/login?message=" + quote_plus("Вы вышли из личного кабинета"), status_code=303)
-    response.delete_cookie(settings.client_cookie_name)
+    clear_scope_cookie(response, SESSION_SCOPE_CLIENT)
     return response
 
 
@@ -196,8 +240,9 @@ def client_tag_update(
     name: str = Form(...),
     target_url: str = Form(...),
     is_active: str = Form("1"),
+    csrf_token: str = Form(...),
 ):
-    auth_redirect = require_client(request)
+    auth_redirect = require_client_post(request, csrf_token, "/client/tags")
     if auth_redirect:
         return auth_redirect
 

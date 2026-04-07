@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import csv
-import hmac
 import io
 import re
 import sqlite3
@@ -12,18 +11,24 @@ from fastapi import APIRouter, Form, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
 from ..auth import (
-    build_admin_cookie,
+    SESSION_SCOPE_ADMIN,
     client_exists,
-    has_admin_access,
+    clear_scope_cookie,
+    create_admin_session,
+    ensure_scope_session,
     hash_password,
+    has_admin_access,
     normalize_client_id,
+    revoke_scope_session,
     require_admin,
     safe_admin_path,
+    set_scope_cookie,
+    validate_csrf_token,
     valid_client_login,
+    verify_password,
 )
 from ..database import get_connection, now_str
 from ..dashboard_service import get_admin_dashboard_data
-from ..settings import settings
 from ..ui import admin_context, templates
 from ..validators import is_public_http_url
 
@@ -50,13 +55,31 @@ def build_chart_rows(top_tags: list[dict]) -> list[dict]:
     return chart_rows
 
 
+def admin_message_url(path: str, message: str) -> str:
+    separator = "&" if "?" in path else "?"
+    return path + separator + "message=" + quote_plus(message)
+
+
+def require_admin_post(request: Request, csrf_token: str, redirect_path: str) -> Optional[RedirectResponse]:
+    auth_redirect = require_admin(request)
+    if auth_redirect:
+        return auth_redirect
+    if validate_csrf_token(request, SESSION_SCOPE_ADMIN, csrf_token):
+        return None
+    return RedirectResponse(
+        url=admin_message_url(redirect_path, "Сессия формы истекла. Обнови страницу и повтори действие."),
+        status_code=303,
+    )
+
+
 @router.get("/admin/login", response_class=HTMLResponse)
 def admin_login_page(request: Request, message: Optional[str] = None, next: str = Query("/admin")):
     next_path = safe_admin_path(next)
     if has_admin_access(request):
         return RedirectResponse(url=next_path, status_code=303)
 
-    return templates.TemplateResponse(
+    _, raw_token = ensure_scope_session(request, SESSION_SCOPE_ADMIN)
+    response = templates.TemplateResponse(
         request,
         "admin/login.html",
         admin_context(
@@ -67,29 +90,67 @@ def admin_login_page(request: Request, message: Optional[str] = None, next: str 
             next_path=next_path,
         ),
     )
+    if raw_token:
+        set_scope_cookie(response, SESSION_SCOPE_ADMIN, raw_token)
+    return response
 
 
 @router.post("/admin/login")
 def admin_login_submit(
     request: Request,
+    login: str = Form(...),
     password: str = Form(...),
     next: str = Form("/admin"),
+    csrf_token: str = Form(...),
 ):
     next_path = safe_admin_path(next)
-    if hmac.compare_digest(password.encode("utf-8"), settings.admin_password.encode("utf-8")):
-        response = RedirectResponse(url=next_path, status_code=303)
-        response.set_cookie(settings.admin_cookie_name, build_admin_cookie(), httponly=True, samesite="lax", max_age=60 * 60 * 12)
+    login = login.strip().lower()
+
+    if not validate_csrf_token(request, SESSION_SCOPE_ADMIN, csrf_token):
+        revoke_scope_session(request, SESSION_SCOPE_ADMIN)
+        response = RedirectResponse(
+            url="/admin/login?message=" + quote_plus("Сессия входа устарела. Обнови страницу и попробуй снова.") + "&next=" + quote_plus(next_path),
+            status_code=303,
+        )
+        clear_scope_cookie(response, SESSION_SCOPE_ADMIN)
         return response
+
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT id, password_hash, is_active
+        FROM admins
+        WHERE login = ?
+        """,
+        (login,),
+    )
+    admin = cur.fetchone()
+    conn.close()
+
+    if admin and int(admin["is_active"]) == 1 and verify_password(password, admin["password_hash"]):
+        _, raw_token = create_admin_session(request, admin["id"])
+        response = RedirectResponse(url=next_path, status_code=303)
+        set_scope_cookie(response, SESSION_SCOPE_ADMIN, raw_token)
+        return response
+
     return RedirectResponse(
-        url="/admin/login?message=" + quote_plus("Неверный пароль") + "&next=" + quote_plus(next_path),
+        url="/admin/login?message=" + quote_plus("Неверный логин или пароль") + "&next=" + quote_plus(next_path),
         status_code=303,
     )
 
 
 @router.post("/admin/logout")
-def admin_logout(request: Request):
+def admin_logout(request: Request, csrf_token: str = Form(...)):
+    if not validate_csrf_token(request, SESSION_SCOPE_ADMIN, csrf_token):
+        return RedirectResponse(
+            url=admin_message_url("/admin", "Сессия формы истекла. Обнови страницу и повтори действие."),
+            status_code=303,
+        )
+
+    revoke_scope_session(request, SESSION_SCOPE_ADMIN)
     response = RedirectResponse(url="/admin/login?message=" + quote_plus("Вы вышли из админки"), status_code=303)
-    response.delete_cookie(settings.admin_cookie_name)
+    clear_scope_cookie(response, SESSION_SCOPE_ADMIN)
     return response
 
 
@@ -174,8 +235,9 @@ def admin_clients_create(
     name: str = Form(...),
     login: str = Form(...),
     password: str = Form(...),
+    csrf_token: str = Form(...),
 ):
-    auth_redirect = require_admin(request)
+    auth_redirect = require_admin_post(request, csrf_token, "/admin/clients")
     if auth_redirect:
         return auth_redirect
 
@@ -216,8 +278,8 @@ def admin_clients_create(
 
 
 @router.post("/admin/clients/{client_id}/toggle")
-def admin_client_toggle(client_id: int, request: Request):
-    auth_redirect = require_admin(request)
+def admin_client_toggle(client_id: int, request: Request, csrf_token: str = Form(...)):
+    auth_redirect = require_admin_post(request, csrf_token, "/admin/clients")
     if auth_redirect:
         return auth_redirect
 
@@ -291,8 +353,9 @@ def admin_tags_create(
     name: str = Form(""),
     target_url: str = Form(...),
     client_id: str = Form(""),
+    csrf_token: str = Form(...),
 ):
-    auth_redirect = require_admin(request)
+    auth_redirect = require_admin_post(request, csrf_token, "/admin/tags")
     if auth_redirect:
         return auth_redirect
 
@@ -340,8 +403,8 @@ def admin_tags_create(
 
 
 @router.post("/admin/tags/{tag_id}/assign")
-def admin_tag_assign(tag_id: int, request: Request, client_id: str = Form("")):
-    auth_redirect = require_admin(request)
+def admin_tag_assign(tag_id: int, request: Request, client_id: str = Form(""), csrf_token: str = Form(...)):
+    auth_redirect = require_admin_post(request, csrf_token, "/admin/tags")
     if auth_redirect:
         return auth_redirect
 
@@ -371,8 +434,8 @@ def admin_tag_assign(tag_id: int, request: Request, client_id: str = Form("")):
 
 
 @router.post("/admin/tags/{tag_id}/toggle")
-def admin_tag_toggle(tag_id: int, request: Request):
-    auth_redirect = require_admin(request)
+def admin_tag_toggle(tag_id: int, request: Request, csrf_token: str = Form(...)):
+    auth_redirect = require_admin_post(request, csrf_token, "/admin/tags")
     if auth_redirect:
         return auth_redirect
 
@@ -392,8 +455,8 @@ def admin_tag_toggle(tag_id: int, request: Request):
 
 
 @router.post("/admin/tags/{tag_id}/delete")
-def admin_tag_delete(tag_id: int, request: Request):
-    auth_redirect = require_admin(request)
+def admin_tag_delete(tag_id: int, request: Request, csrf_token: str = Form(...)):
+    auth_redirect = require_admin_post(request, csrf_token, "/admin/tags")
     if auth_redirect:
         return auth_redirect
 

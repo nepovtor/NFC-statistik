@@ -6,7 +6,7 @@
     {% call page_header("Дашборд", "Теперь здесь видно и общую статистику, и клиентские кабинеты.") %}
         <a class="btn" href="/admin/clients">Клиенты</a>
         <a class="btn btn-secondary" href="/admin/tags">Метки</a>
-        {{ logout_form("/admin/logout") }}
+        {{ logout_form("/admin/logout", csrf_token) }}
     {% endcall %}
 
     <div class="cards">

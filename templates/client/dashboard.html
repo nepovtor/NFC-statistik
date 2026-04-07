@@ -6,7 +6,7 @@
     {% call page_header("Личный кабинет", "Клиент: " ~ client.name ~ ". Здесь видны только ваши NFC-метки и ваши переходы.") %}
         <a class="btn" href="/client/tags">Мои NFC</a>
         <a class="btn btn-secondary" href="/client/visits">Переходы</a>
-        {{ logout_form("/client/logout") }}
+        {{ logout_form("/client/logout", csrf_token) }}
     {% endcall %}
 
     <div class="cards">

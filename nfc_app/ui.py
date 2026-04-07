@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import Request
 from fastapi.templating import Jinja2Templates
 
+from .auth import SESSION_SCOPE_ADMIN, SESSION_SCOPE_CLIENT, get_session_csrf_token
 from .settings import settings
 
 templates = Jinja2Templates(directory=str(settings.base_dir / "templates"))
@@ -33,6 +34,7 @@ def admin_context(request: Request, page_title: str, active_nav: str | None, **c
         "brand_subtitle": "Управление метками и клиентами",
         "nav_links": ADMIN_NAV_LINKS,
         "active_nav": active_nav,
+        "csrf_token": context.pop("csrf_token", None) or get_session_csrf_token(request, SESSION_SCOPE_ADMIN),
         **context,
     }
 
@@ -45,5 +47,6 @@ def client_context(request: Request, page_title: str, active_nav: str | None, **
         "brand_subtitle": "Личный кабинет клиента",
         "nav_links": CLIENT_NAV_LINKS,
         "active_nav": active_nav,
+        "csrf_token": context.pop("csrf_token", None) or get_session_csrf_token(request, SESSION_SCOPE_CLIENT),
         **context,
     }

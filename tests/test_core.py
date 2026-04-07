@@ -5,8 +5,10 @@ import unittest
 from contextlib import contextmanager
 from pathlib import Path
 from tempfile import TemporaryDirectory
+import re
 
 from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
 from nfc_app.app import create_app
 from nfc_app.auth import (
@@ -43,6 +45,24 @@ class DummyRequest:
         self.base_url = base_url
         self.headers = headers or {}
         self.client = type("Client", (), {"host": client_host})()
+
+
+def test_runtime_settings(**updates):
+    base_updates = {
+        "session_secret": "test-session-secret",
+        "admin_login": "admin",
+        "admin_password_hash": hash_password("AdminSecret123"),
+        "secure_cookies": False,
+    }
+    base_updates.update(updates)
+    return override_settings(**base_updates)
+
+
+def extract_csrf_token(html: str) -> str:
+    match = re.search(r'name="csrf_token" value="([^"]+)"', html)
+    if not match:
+        raise AssertionError("csrf_token input not found in HTML")
+    return match.group(1)
 
 
 class AuthTests(unittest.TestCase):
@@ -108,17 +128,88 @@ class DatabaseTests(unittest.TestCase):
     def test_init_db_creates_tables_and_default_tags(self):
         with TemporaryDirectory() as tmp_dir:
             temp_db = Path(tmp_dir) / "test.db"
-            with override_settings(db_path=temp_db):
+            with test_runtime_settings(db_path=temp_db):
                 init_db()
                 conn = sqlite3.connect(temp_db)
                 tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
                 tags_count = conn.execute("SELECT COUNT(*) FROM tags").fetchone()[0]
+                admins_count = conn.execute("SELECT COUNT(*) FROM admins").fetchone()[0]
                 conn.close()
 
         self.assertIn("clients", tables)
         self.assertIn("tags", tables)
         self.assertIn("visits", tables)
+        self.assertIn("admins", tables)
+        self.assertIn("sessions", tables)
         self.assertGreaterEqual(tags_count, 4)
+        self.assertEqual(admins_count, 1)
+
+
+class SecurityFlowTests(unittest.TestCase):
+    def test_admin_login_requires_valid_csrf_and_logout_revokes_session(self):
+        with TemporaryDirectory() as tmp_dir:
+            temp_db = Path(tmp_dir) / "test.db"
+            with test_runtime_settings(db_path=temp_db):
+                init_db()
+                app = create_app()
+                with TestClient(app) as client:
+                    login_page = client.get("/admin/login")
+                    self.assertEqual(login_page.status_code, 200)
+
+                    bad_login = client.post(
+                        "/admin/login",
+                        data={"login": "admin", "password": "AdminSecret123", "next": "/admin", "csrf_token": "bad-token"},
+                        follow_redirects=False,
+                    )
+                    self.assertEqual(bad_login.status_code, 303)
+                    self.assertIn("/admin/login?message=", bad_login.headers["location"])
+
+                    fresh_login_page = client.get("/admin/login")
+                    fresh_csrf_token = extract_csrf_token(fresh_login_page.text)
+
+                    ok_login = client.post(
+                        "/admin/login",
+                        data={"login": "admin", "password": "AdminSecret123", "next": "/admin", "csrf_token": fresh_csrf_token},
+                        follow_redirects=False,
+                    )
+                    self.assertEqual(ok_login.status_code, 303)
+                    self.assertEqual(ok_login.headers["location"], "/admin")
+
+                    dashboard = client.get("/admin")
+                    self.assertEqual(dashboard.status_code, 200)
+                    dashboard_csrf = extract_csrf_token(dashboard.text)
+
+                    logout = client.post(
+                        "/admin/logout",
+                        data={"csrf_token": dashboard_csrf},
+                        follow_redirects=False,
+                    )
+                    self.assertEqual(logout.status_code, 303)
+                    self.assertIn("/admin/login?message=", logout.headers["location"])
+
+                    redirected_dashboard = client.get("/admin", follow_redirects=False)
+                    self.assertEqual(redirected_dashboard.status_code, 303)
+                    self.assertIn("/admin/login?next=", redirected_dashboard.headers["location"])
+
+    def test_public_go_route_uses_forwarded_client_ip(self):
+        with TemporaryDirectory() as tmp_dir:
+            temp_db = Path(tmp_dir) / "test.db"
+            with test_runtime_settings(db_path=temp_db, trust_proxy_headers=True):
+                init_db()
+                app = create_app()
+                with TestClient(app) as client:
+                    response = client.get(
+                        "/go/table1",
+                        headers={"x-forwarded-for": "203.0.113.10, 172.18.0.2"},
+                        follow_redirects=False,
+                    )
+                    self.assertEqual(response.status_code, 302)
+
+                conn = sqlite3.connect(temp_db)
+                ip_address = conn.execute("SELECT ip_address FROM visits ORDER BY id DESC LIMIT 1").fetchone()[0]
+                conn.close()
+
+        self.assertEqual(ip_address, "203.0.113.10")
 
 
 class AppFactoryTests(unittest.TestCase):
@@ -127,6 +218,8 @@ class AppFactoryTests(unittest.TestCase):
         self.assertIsInstance(app, FastAPI)
         route_paths = {route.path for route in app.router.routes}
         self.assertIn("/", route_paths)
+        self.assertIn("/healthz", route_paths)
+        self.assertIn("/readyz", route_paths)
         self.assertIn("/admin", route_paths)
         self.assertIn("/client", route_paths)
         self.assertIn("/client/tags/{tag_id}/update", route_paths)

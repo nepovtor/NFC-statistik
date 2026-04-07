@@ -6,7 +6,7 @@ services:
     healthcheck:
       test:
         - CMD-SHELL
-        - python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/', timeout=5).read()"
+        - python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/readyz', timeout=5).read()"
       interval: 30s
       timeout: 5s
       retries: 3
@@ -14,8 +14,10 @@ services:
     env_file:
       - .env.production
     environment:
+      APP_ENV: "production"
       ADMIN_TAILSCALE_ONLY: "1"
       TRUST_PROXY_HEADERS: "1"
+      COOKIE_SECURE: "1"
       NFC_STATS_DB_PATH: /data/nfc_stats.db
     expose:
       - "8001"

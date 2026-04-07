@@ -4,7 +4,7 @@
 
 {% block content %}
     {% call page_header("Журнал переходов", "Подробный список всех открытий NFC-ссылок.") %}
-        {{ logout_form("/admin/logout") }}
+        {{ logout_form("/admin/logout", csrf_token) }}
     {% endcall %}
 
     {% call panel("Фильтр") %}

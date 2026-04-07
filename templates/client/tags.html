@@ -1,10 +1,10 @@
 {% extends "base.html" %}
 {% from "components/ui.html" import copy_button, hint_box, page_header, panel %}
-{% from "macros.html" import logout_form, status_badge %}
+{% from "macros.html" import csrf_input, logout_form, status_badge %}
 
 {% block content %}
     {% call page_header("Мои NFC", "Здесь видны ваши коды, рабочие NFC-ссылки и текущий статус каждой метки.") %}
-        {{ logout_form("/client/logout") }}
+        {{ logout_form("/client/logout", csrf_token) }}
     {% endcall %}
 
     {% call panel("Что записывать в NFC") %}
@@ -47,6 +47,7 @@
                     </div>
 
                     <form method="post" action="/client/tags/{{ row.id }}/update" class="stack">
+                        {{ csrf_input(csrf_token) }}
                         <div class="forms-grid">
                             <label>
                                 <span class="field-label">Название метки</span>

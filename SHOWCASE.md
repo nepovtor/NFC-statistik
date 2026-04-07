@@ -45,7 +45,10 @@
 
 - FastAPI-приложение с разделением на роутеры, сервисный слой и шаблоны
 - SQLite для быстрого self-hosted сценария
+- серверные сессии, CSRF-защита форм и безопасные cookie
 - клиентские кабинеты с разграничением доступа
+- real client IP за reverse proxy и технические `/healthz` + `/readyz`
+- отдельный bootstrap/migrate-step для схемы БД
 - отдельный production-стек с Docker Compose и reverse proxy
 - приватная админка через Tailscale
 - автоматизация стабильной локальной работы на Mac через watchdog и launchd

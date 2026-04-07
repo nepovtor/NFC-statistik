@@ -1,10 +1,10 @@
 {% extends "base.html" %}
 {% from "components/ui.html" import data_table, empty_row, hint_box, page_header, panel %}
-{% from "macros.html" import logout_form, status_badge %}
+{% from "macros.html" import csrf_input, logout_form, status_badge %}
 
 {% block content %}
     {% call page_header("Клиенты", "Здесь создаются личные кабинеты для покупателей NFC.") %}
-        {{ logout_form("/admin/logout") }}
+        {{ logout_form("/admin/logout", csrf_token) }}
     {% endcall %}
 
     {% call panel("Как это работает") %}
@@ -15,6 +15,7 @@
 
     {% call panel("Создать клиента") %}
         <form method="post" action="/admin/clients/create">
+            {{ csrf_input(csrf_token) }}
             <div class="forms-grid">
                 <label>
                     <span class="field-label">Имя клиента</span>
@@ -47,6 +48,7 @@
                         <td data-label="Статус">{{ status_badge(row.is_active, "Доступ открыт", "Доступ выключен") }}</td>
                         <td data-label="Действия">
                             <form method="post" action="/admin/clients/{{ row.id }}/toggle">
+                                {{ csrf_input(csrf_token) }}
                                 <button class="btn btn-secondary" type="submit">{{ 'Закрыть доступ' if row.is_active else 'Открыть доступ' }}</button>
                             </form>
                         </td>

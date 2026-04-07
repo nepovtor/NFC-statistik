@@ -1,14 +1,15 @@
 {% extends "base.html" %}
 {% from "components/ui.html" import data_table, empty_row, hint_box, page_header, panel %}
-{% from "macros.html" import client_identity, logout_form, status_badge %}
+{% from "macros.html" import client_identity, csrf_input, logout_form, status_badge %}
 
 {% block content %}
     {% call page_header("Метки и ссылки", "Здесь создаются коды NFC, ссылки и назначаются владельцы.") %}
-        {{ logout_form("/admin/logout") }}
+        {{ logout_form("/admin/logout", csrf_token) }}
     {% endcall %}
 
     {% call panel("Добавить новую метку") %}
         <form method="post" action="/admin/tags/create">
+            {{ csrf_input(csrf_token) }}
             <div class="forms-grid">
                 <label>
                     <span class="field-label">Код метки</span>
@@ -58,6 +59,7 @@
                         <td data-label="Действия">
                             <div class="stack">
                                 <form method="post" action="/admin/tags/{{ row.id }}/assign" class="stack">
+                                    {{ csrf_input(csrf_token) }}
                                     <select name="client_id">
                                         <option value="">Без владельца</option>
                                         {% for client in clients %}
@@ -70,9 +72,11 @@
                                 </form>
                                 <div class="inline-actions">
                                     <form method="post" action="/admin/tags/{{ row.id }}/toggle">
+                                        {{ csrf_input(csrf_token) }}
                                         <button class="btn btn-secondary" type="submit">{{ 'Выключить' if row.is_active else 'Включить' }}</button>
                                     </form>
                                     <form method="post" action="/admin/tags/{{ row.id }}/delete" onsubmit="return confirm('Удалить метку?')">
+                                        {{ csrf_input(csrf_token) }}
                                         <button class="btn btn-danger" type="submit">Удалить</button>
                                     </form>
                                 </div>

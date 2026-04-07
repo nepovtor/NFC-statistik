@@ -8,15 +8,17 @@ services:
     healthcheck:
       test:
         - CMD-SHELL
-        - python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/', timeout=5).read()"
+        - python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/readyz', timeout=5).read()"
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 10s
     environment:
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-пароль}
-      ADMIN_SESSION_SECRET: ${ADMIN_SESSION_SECRET:-change-this-in-production}
+      SESSION_SECRET: ${SESSION_SECRET?SESSION_SECRET is required}
+      ADMIN_LOGIN: ${ADMIN_LOGIN?ADMIN_LOGIN is required}
+      ADMIN_PASSWORD_HASH: ${ADMIN_PASSWORD_HASH?ADMIN_PASSWORD_HASH is required}
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:8001}
       NFC_STATS_DB_PATH: ${NFC_STATS_DB_PATH:-/data/nfc_stats.db}
+      COOKIE_SECURE: ${COOKIE_SECURE:-0}
     volumes:
       - ./data:/data

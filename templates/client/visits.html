@@ -4,7 +4,7 @@
 
 {% block content %}
     {% call page_header("Мои переходы", "Подробный журнал открытий только по вашим NFC-меткам.") %}
-        {{ logout_form("/client/logout") }}
+        {{ logout_form("/client/logout", csrf_token) }}
     {% endcall %}
 
     {% call panel("Фильтр") %}

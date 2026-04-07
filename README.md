@@ -66,7 +66,7 @@ NFC-метка -> /go/{code} -> запись визита -> редирект н
 
 | Режим | Когда использовать | Результат |
 | --- | --- | --- |
-| Локально через Python | Быстрая разработка | `uvicorn` на `127.0.0.1:8001` |
+| Локально через Python | Быстрая разработка | явный migrate-step и запуск на `127.0.0.1:8001` |
 | Локально через Docker | Удобный повседневный запуск | контейнер с SQLite и healthcheck |
 | Mac + Tailscale | Приватный стабильный режим без отдельного сервера | сайт внутри tailnet |
 | Production с доменом | Публичный доступ для клиентов | HTTPS, reverse proxy, приватная админка |
@@ -127,12 +127,17 @@ sudo /Applications/Tailscale.app/Contents/MacOS/Tailscale status
 ### Вариант 1. Локально через Docker
 
 ```bash
+cp .env.example .env
+# сгенерируй реальный ADMIN_PASSWORD_HASH:
+# python3 -m nfc_app.auth hash-password "StrongAdminPass123!"
 docker compose up -d --build
 ```
 
-После запуска:
+После первого запуска проверь:
 
-- `http://127.0.0.1:8001/` — проверка сервиса
+- `http://127.0.0.1:8001/` — корневой маршрут
+- `http://127.0.0.1:8001/healthz` — liveness
+- `http://127.0.0.1:8001/readyz` — readiness
 - `http://127.0.0.1:8001/admin/login` — вход в админку
 
 Остановка:
@@ -144,10 +149,18 @@ docker compose down
 Локальные значения берутся из `.env`:
 
 ```env
-ADMIN_PASSWORD=пароль
-ADMIN_SESSION_SECRET=change-this-in-production
-PUBLIC_BASE_URL=https://nepovtor.tail3b401a.ts.net
+SESSION_SECRET=replace-with-a-long-random-secret
+ADMIN_LOGIN=admin
+ADMIN_PASSWORD_HASH=pbkdf2_sha256$200000$replace_me$replace_me
+PUBLIC_BASE_URL=http://localhost:8001
 NFC_STATS_DB_PATH=/data/nfc_stats.db
+COOKIE_SECURE=0
+```
+
+Хэш пароля администратора можно сгенерировать так:
+
+```bash
+python3 -m nfc_app.auth hash-password "StrongAdminPass123!"
 ```
 
 ### Вариант 2. Локально через Python
@@ -156,7 +169,16 @@ NFC_STATS_DB_PATH=/data/nfc_stats.db
 python3 -m venv .venv
 source .venv/bin/activate
 python3 -m pip install -r requirements.txt
+cp .env.example .env
+# подставь реальный ADMIN_PASSWORD_HASH в .env
+python3 -m nfc_app.database migrate
 python3 -m uvicorn main:app --reload --port 8001
+```
+
+Если не нужен `--reload`, можно использовать готовый bootstrap entrypoint:
+
+```bash
+python3 -m nfc_app
 ```
 
 ### Вариант 3. Windows
@@ -165,6 +187,9 @@ python3 -m uvicorn main:app --reload --port 8001
 py -m venv .venv
 .\.venv\Scripts\Activate.ps1
 py -m pip install -r requirements.txt
+copy .env.example .env
+# подставь реальный ADMIN_PASSWORD_HASH в .env
+py -m nfc_app.database migrate
 py -m uvicorn main:app --reload --port 8001
 ```
 
@@ -179,6 +204,8 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 | Адрес | Назначение |
 | --- | --- |
 | `/` | Проверка, что сервис работает |
+| `/healthz` | Технический liveness endpoint |
+| `/readyz` | Технический readiness endpoint |
 | `/admin` | Дашборд администратора |
 | `/admin/login` | Вход в админку |
 | `/admin/clients` | Управление клиентами |
@@ -197,7 +224,7 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 ### Как добавить новую метку
 
 1. Открой `/admin/login`.
-2. Войди в админку.
+2. Войди в админку по логину и паролю администратора.
 3. Перейди в раздел `Метки и ссылки`.
 4. Создай метку:
    - код, например `menu7`
@@ -285,9 +312,16 @@ docker compose -f compose.production.yaml --env-file .env.production up -d --bui
 
 - `DOMAIN`
 - `PUBLIC_BASE_URL`
-- `ADMIN_PASSWORD`
-- `ADMIN_SESSION_SECRET`
+- `SESSION_SECRET`
+- `ADMIN_LOGIN`
+- `ADMIN_PASSWORD_HASH`
 - `ADMIN_ALLOWED_NETWORKS`
+
+Пароль администратора хранится в БД только в виде хэша. Хэш можно подготовить заранее:
+
+```bash
+python3 -m nfc_app.auth hash-password "StrongAdminPass123!"
+```
 
 ## Админка только через Tailscale
 
@@ -341,8 +375,10 @@ python3 -m unittest discover -s tests -v
 
 ## Что важно перед реальным использованием
 
-- смени пароль `пароль` на свой
-- задай свой `ADMIN_SESSION_SECRET`
+- не оставляй плейсхолдеры из `.env.example` и `.env.production.example`
+- задай реальный `SESSION_SECRET`
+- используй собственный `ADMIN_LOGIN` и `ADMIN_PASSWORD_HASH`
+- для HTTPS включай `COOKIE_SECURE=1`
 - делай резервную копию `data/nfc_stats.db`
 - не используй локальный Tailscale-режим для клиентов без Tailscale
 - если сайт остаётся на Mac, отключи сон или не давай Mac засыпать

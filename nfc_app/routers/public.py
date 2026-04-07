@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import sqlite3
+
 from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import JSONResponse
 from fastapi.responses import RedirectResponse
 
+from ..auth import get_request_ip
 from ..database import get_connection, now_str
 
 router = APIRouter()
@@ -12,10 +16,31 @@ router = APIRouter()
 def home() -> dict:
     return {
         "message": "Сервис работает.",
+        "health": "/healthz",
+        "ready": "/readyz",
         "admin": "/admin",
         "client_login": "/client/login",
         "go_example": "/go/table1",
     }
+
+
+@router.get("/healthz")
+def healthz() -> dict:
+    return {"status": "ok"}
+
+
+@router.get("/readyz")
+def readyz():
+    try:
+        conn = get_connection()
+        cur = conn.cursor()
+        cur.execute("SELECT COUNT(*) AS total FROM schema_migrations")
+        migrations_total = cur.fetchone()["total"]
+        conn.close()
+    except sqlite3.Error as exc:
+        return JSONResponse(status_code=503, content={"status": "not-ready", "detail": str(exc)})
+
+    return {"status": "ready", "migrations_applied": migrations_total}
 
 
 @router.get("/go/{tag_code}")
@@ -35,7 +60,7 @@ def go(tag_code: str, request: Request):
         conn.close()
         raise HTTPException(status_code=403, detail="Эта NFC-метка выключена")
 
-    ip_address = request.client.host if request.client else "unknown"
+    ip_address = get_request_ip(request) or "unknown"
     user_agent = request.headers.get("user-agent", "unknown")
     referer = request.headers.get("referer", "")
     visited_at = now_str()

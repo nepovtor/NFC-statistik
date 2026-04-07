@@ -6,14 +6,15 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from .auth import admin_tailscale_block_response, is_admin_request_allowed
-from .database import init_db
+from .database import assert_database_ready
 from .routers import admin_router, client_router, public_router
-from .settings import settings
+from .settings import settings, validate_runtime_settings
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    init_db()
+    validate_runtime_settings()
+    assert_database_ready()
     yield
 
 

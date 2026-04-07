@@ -14,8 +14,13 @@
     {% endif %}
 {%- endmacro %}
 
-{% macro logout_form(action) -%}
+{% macro csrf_input(csrf_token) -%}
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+{%- endmacro %}
+
+{% macro logout_form(action, csrf_token) -%}
     <form method="post" action="{{ action }}">
+        {{ csrf_input(csrf_token) }}
         <button class="btn btn-secondary" type="submit">Выйти</button>
     </form>
 {%- endmacro %}
