@@ -22,7 +22,8 @@ fi
 
 mkdir -p data caddy_data caddy_config
 
-docker compose -f compose.production.yaml --env-file .env.production up -d --build
+DOCKER_BUILDKIT="${DOCKER_BUILDKIT:-0}" COMPOSE_DOCKER_CLI_BUILD="${COMPOSE_DOCKER_CLI_BUILD:-0}" \
+    docker compose -f compose.production.yaml --env-file .env.production up -d --build
 
 if command -v tailscale >/dev/null 2>&1; then
     tailscale serve --bg 8001 >/dev/null 2>&1 || true

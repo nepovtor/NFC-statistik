@@ -1,6 +1,9 @@
 services:
   nfc_migrate:
-    build: .
+    build:
+      context: .
+      args:
+        BASE_IMAGE: ${DOCKER_BASE_IMAGE:-python:3.12-slim}
     container_name: nfc_app_prod_migrate
     restart: "no"
     command: ["python", "-m", "nfc_app", "migrate"]
@@ -15,6 +18,7 @@ services:
       SESSION_TOUCH_INTERVAL_MINUTES: ${SESSION_TOUCH_INTERVAL_MINUTES:-5}
       LOGIN_RATE_LIMIT_ATTEMPTS: ${LOGIN_RATE_LIMIT_ATTEMPTS:-5}
       LOGIN_RATE_LIMIT_WINDOW_MINUTES: ${LOGIN_RATE_LIMIT_WINDOW_MINUTES:-15}
+      VISIT_STORAGE_MODE: ${VISIT_STORAGE_MODE:-minimized}
       VISIT_DATA_EXPOSURE: ${VISIT_DATA_EXPOSURE:-masked}
       VISIT_RETENTION_DAYS: ${VISIT_RETENTION_DAYS:-180}
       NFC_STATS_DB_PATH: /data/nfc_stats.db
@@ -22,7 +26,10 @@ services:
       - ./data:/data
 
   nfc_app:
-    build: .
+    build:
+      context: .
+      args:
+        BASE_IMAGE: ${DOCKER_BASE_IMAGE:-python:3.12-slim}
     container_name: nfc_app_prod
     restart: unless-stopped
     depends_on:
@@ -48,6 +55,7 @@ services:
       SESSION_TOUCH_INTERVAL_MINUTES: ${SESSION_TOUCH_INTERVAL_MINUTES:-5}
       LOGIN_RATE_LIMIT_ATTEMPTS: ${LOGIN_RATE_LIMIT_ATTEMPTS:-5}
       LOGIN_RATE_LIMIT_WINDOW_MINUTES: ${LOGIN_RATE_LIMIT_WINDOW_MINUTES:-15}
+      VISIT_STORAGE_MODE: ${VISIT_STORAGE_MODE:-minimized}
       VISIT_DATA_EXPOSURE: ${VISIT_DATA_EXPOSURE:-masked}
       VISIT_RETENTION_DAYS: ${VISIT_RETENTION_DAYS:-180}
       NFC_STATS_DB_PATH: /data/nfc_stats.db

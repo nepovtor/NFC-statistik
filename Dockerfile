@@ -1,11 +1,15 @@
-FROM python:3.12-slim
+ARG BASE_IMAGE=python:3.12-slim
+FROM ${BASE_IMAGE}
 
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
 WORKDIR /app
 
-RUN addgroup --system app && adduser --system --ingroup app --uid 10001 app
+USER root
+
+RUN getent group app >/dev/null || addgroup --system app
+RUN id -u app >/dev/null 2>&1 || adduser --system --ingroup app --uid 10001 app
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
